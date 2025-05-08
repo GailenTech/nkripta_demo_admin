@@ -7,11 +7,12 @@ echo -e "\033[1;33mInicializando entorno completo...\033[0m"
 
 # 1. Esperar a que todos los servicios estén listos
 echo -e "\033[1;33mEsperando a que los servicios estén listos...\033[0m"
-bash scripts/wait-for-services.sh
+# Usamos docker compose exec para ejecutar el script dentro del contenedor de la aplicación
+docker compose exec app bash scripts/wait-for-services.sh
 
 # 2. Crear recursos de Cognito
 echo -e "\033[1;33mCreando recursos de Cognito...\033[0m"
-node scripts/create-cognito-resources.js > cognito_info.tmp
+docker compose exec -T app node scripts/create-cognito-resources.js > cognito_info.tmp
 
 # 3. Actualizar variables de entorno
 echo -e "\033[1;33mActualizando variables de entorno...\033[0m"
