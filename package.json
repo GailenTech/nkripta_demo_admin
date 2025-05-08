@@ -12,7 +12,10 @@
     "test:organizations": "jest tests/organizations.test.js",
     "test:profiles": "jest tests/profiles.test.js",
     "test:subscriptions": "jest tests/subscriptions.test.js",
-    "test:integration": "jest tests/integration.test.js"
+    "test:integration": "jest tests/integration.test.js",
+    "setup:test": "node scripts/setup-test-environment.js",
+    "test:with-setup": "npm run setup:test && npm test",
+    "test:skip-external": "node scripts/create-test-env.js && npm test"
   },
   "dependencies": {
     "aws-sdk": "^2.1358.0",

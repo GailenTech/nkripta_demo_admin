@@ -5,8 +5,22 @@
  * de utilidad comunes para los tests.
  */
 
+const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
-dotenv.config();
+
+// Cargar variables de entorno en el siguiente orden:
+// 1. .env.test (configuración específica para tests)
+// 2. .env (configuración general)
+const envTestPath = path.resolve(__dirname, '../.env.test');
+
+if (fs.existsSync(envTestPath)) {
+  console.log('Cargando variables de entorno desde .env.test');
+  dotenv.config({ path: envTestPath });
+} else {
+  console.log('Archivo .env.test no encontrado, usando .env');
+  dotenv.config();
+}
 
 // Estado global para datos de prueba
 const TEST_STATE = {
@@ -45,6 +59,14 @@ const TEST_CREDENTIALS = {
 
 // URL base para la API
 const API_URL = process.env.API_URL || 'http://localhost:3000/api';
+
+// Información de diagnóstico en modo verboso
+console.log('Configuración de pruebas cargada:');
+console.log('- URL API:', API_URL);
+console.log('- Usuario de prueba:', TEST_CREDENTIALS.admin.email);
+console.log('- Cognito UserPool:', process.env.COGNITO_USER_POOL_ID);
+console.log('- Cognito ClientId:', process.env.COGNITO_CLIENT_ID);
+console.log('- Cognito Endpoint:', process.env.COGNITO_ENDPOINT);
 
 // Exportar constantes y estado compartido
 module.exports = {

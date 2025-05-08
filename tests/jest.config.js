@@ -1,33 +1,38 @@
 /**
- * Configuración de Jest para tests de nkripta_admin
+ * Configuración de Jest para las pruebas
  */
 
 module.exports = {
-  // Directorio raíz donde Jest buscará los archivos
-  rootDir: '../',
+  // Directorio raíz desde donde Jest debería buscar archivos
+  rootDir: '..',
   
-  // Patrón para los archivos de test
-  testMatch: ['<rootDir>/tests/**/*.test.js'],
+  // Patrón de archivos que contienen pruebas
+  testMatch: [
+    '<rootDir>/tests/**/*.test.js'
+  ],
   
-  // Ignorar directorios
-  testPathIgnorePatterns: ['/node_modules/'],
+  // Rutas a ignorar
+  testPathIgnorePatterns: [
+    '/node_modules/'
+  ],
   
-  // Tiempo máximo de ejecución para cada test (en ms)
-  testTimeout: 30000,
+  // Tiempo máximo de ejecución para cada test
+  testTimeout: 10000,
   
-  // Mostrar salida de consola durante las pruebas
+  // Reportes detallados
   verbose: true,
   
-  // Ejecutar tests en modo secuencial
-  // Esto es importante porque tenemos dependencias entre tests
-  // (un test usa los datos creados por otro)
-  runInBand: true,
+  // Configurar un reporte de cobertura
+  collectCoverage: false,
   
-  // No cachear las transformaciones (para asegurar que las pruebas corren con código fresco)
-  cache: false,
+  // Se debe establecer si el backend ya está en ejecución 
+  // o si debemos iniciar uno como parte de las pruebas
+  globalSetup: undefined, // '<rootDir>/tests/globalSetup.js',
+  globalTeardown: undefined, // '<rootDir>/tests/globalTeardown.js',
   
-  // Variables de entorno para tests
-  globals: {
-    API_URL: 'http://localhost:3000/api'
-  }
+  // Variables de entorno para las pruebas
+  testEnvironment: 'node',
+  
+  // Número máximo de trabajadores 
+  maxWorkers: '50%'
 };
