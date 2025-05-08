@@ -3,7 +3,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Instalar dependencias del sistema
-RUN apk add --no-cache bash postgresql-client curl
+RUN apk add --no-cache bash postgresql-client curl netcat-openbsd
 
 # Copiar archivos de dependencias primero para aprovechar la caché de Docker
 COPY package*.json ./
