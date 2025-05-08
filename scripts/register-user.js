@@ -7,7 +7,7 @@ require('dotenv').config();
 // Configurar cliente de cognito
 const cognitoConfig = {
   region: process.env.COGNITO_REGION,
-  endpoint: 'http://localhost:9229',
+  endpoint: process.env.COGNITO_ENDPOINT || 'http://localhost:9229',
   accessKeyId: 'LOCAL_FAKE_KEY',
   secretAccessKey: 'LOCAL_FAKE_SECRET'
 };

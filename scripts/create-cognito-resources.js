@@ -7,7 +7,7 @@ require('dotenv').config();
 // Configurar cliente de cognito
 const cognitoConfig = {
   region: process.env.COGNITO_REGION,
-  endpoint: 'http://localhost:9229',  // Usar localhost en lugar de cognito-local desde fuera del contenedor
+  endpoint: process.env.COGNITO_ENDPOINT || 'http://localhost:9229',  // Usar variable de entorno o localhost como fallback
   accessKeyId: 'LOCAL_FAKE_KEY',
   secretAccessKey: 'LOCAL_FAKE_SECRET'
 };

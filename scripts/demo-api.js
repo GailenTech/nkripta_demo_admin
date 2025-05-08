@@ -9,7 +9,7 @@ const axios = require('axios');
 const chalk = require('chalk'); // Opcional, para colorear la salida en consola
 
 // Configuración base
-const API_URL = 'http://localhost:3000/api';
+const API_URL = 'http://app:3000/api'; // Usando hostname del servicio en docker-compose
 let token = '';
 
 // Función para imprimir respuestas
