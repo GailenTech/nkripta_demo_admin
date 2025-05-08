@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:14
+    container_name: nkripta-postgres
+    environment:
+      POSTGRES_DB: nkripta
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - nkripta-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Cognito Local para simular AWS Cognito
+  cognito-local:
+    image: jagregory/cognito-local:latest
+    container_name: nkripta-cognito
+    ports:
+      - "9229:9229"
+    volumes:
+      - cognito-data:/data
+    environment:
+      - PORT=9229
+      - NODE_ENV=production
+      - DATA_PATH=/data
+    networks:
+      - nkripta-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9229/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Stripe Mock para simular Stripe API
+  stripe-mock:
+    image: stripe/stripe-mock:latest
+    container_name: nkripta-stripe-mock
+    ports:
+      - "12111:12111"
+      - "12112:12112"
+    networks:
+      - nkripta-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12111/v1/customers"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PgAdmin para administrar PostgreSQL (opcional)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: nkripta-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@nkripta.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      # Conexión automática al servidor PostgreSQL
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin-config/servers.json:/pgadmin4/servers.json
+      - ./pgadmin-config/pgpassfile:/pgpassfile
+    networks:
+      - nkripta-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres-data:
+  cognito-data:
+  pgadmin-data:
+  
+networks:
+  nkripta-network:
+    driver: bridge

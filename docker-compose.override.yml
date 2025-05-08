@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # Servicio principal de la aplicación
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nkripta-app
+    depends_on:
+      - postgres
+      - cognito-local
+      - stripe-mock
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - COGNITO_ENDPOINT=http://cognito-local:9229
+    networks:
+      - nkripta-network
+    command: npm run dev

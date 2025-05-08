@@ -1,0 +1,16 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "nkripta-postgres",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpassfile",
+      "SavePassword": true,
+      "Comment": "PostgreSQL server for nkripta_admin"
+    }
+  }
+}

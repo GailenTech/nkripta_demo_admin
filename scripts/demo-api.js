@@ -1,0 +1,133 @@
+/**
+ * Script de demostración de API para nkripta_admin
+ * 
+ * Este script muestra cómo usar la API desde JavaScript (Node.js)
+ * Útil para integraciones y pruebas automatizadas
+ */
+
+const axios = require('axios');
+const chalk = require('chalk'); // Opcional, para colorear la salida en consola
+
+// Configuración base
+const API_URL = 'http://localhost:3000/api';
+let token = '';
+
+// Función para imprimir respuestas
+const printResponse = (title, response) => {
+  console.log(chalk.blue('\n============================================='));
+  console.log(chalk.blue(title));
+  console.log(chalk.blue('=============================================\n'));
+  
+  console.log(chalk.yellow('Respuesta:'));
+  // Mostrar solo los datos relevantes
+  const data = response.data;
+  console.log(JSON.stringify(data, null, 2));
+  console.log('\n');
+  
+  return data;
+};
+
+// Función principal
+async function runDemo() {
+  try {
+    // 0. Verificar que la API está en funcionamiento
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('0. Verificando que la API está en funcionamiento'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    console.log(chalk.green('Haciendo GET a', API_URL));
+    const healthResponse = await axios.get(API_URL);
+    printResponse('Estado de la API', healthResponse);
+
+    // 1. Autenticación - Login
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('1. Autenticación - Iniciar sesión con el usuario admin'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    console.log(chalk.green('Haciendo POST a', `${API_URL}/auth/login`));
+    const loginResponse = await axios.post(`${API_URL}/auth/login`, {
+      email: 'admin@example.com',
+      password: 'Password123'
+    });
+    
+    const loginData = printResponse('Login', loginResponse);
+    token = loginData.token;
+    
+    console.log(chalk.green('Token JWT obtenido:'), token.substring(0, 30) + '...');
+
+    // Configurar el header de autorización para futuras peticiones
+    const authHeader = { Authorization: `Bearer ${token}` };
+
+    // 2. Obtener perfil del usuario
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('2. Verificar perfil del usuario autenticado'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    console.log(chalk.green('Haciendo GET a', `${API_URL}/auth/me`));
+    const profileResponse = await axios.get(`${API_URL}/auth/me`, { headers: authHeader });
+    const profileData = printResponse('Perfil', profileResponse);
+
+    // 3. Obtener detalles de la organización
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('3. Obtener detalles de la organización'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    const orgId = '00000000-0000-0000-0000-000000000000';
+    console.log(chalk.green('Haciendo GET a', `${API_URL}/organizations/${orgId}`));
+    const orgResponse = await axios.get(`${API_URL}/organizations/${orgId}`, { headers: authHeader });
+    const orgData = printResponse('Organización', orgResponse);
+
+    // 4. Obtener miembros de la organización
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('4. Obtener miembros de la organización'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    console.log(chalk.green('Haciendo GET a', `${API_URL}/organizations/${orgId}/members?page=1&limit=10`));
+    const membersResponse = await axios.get(`${API_URL}/organizations/${orgId}/members?page=1&limit=10`, { headers: authHeader });
+    const membersData = printResponse('Miembros', membersResponse);
+
+    // 5. Crear una nueva organización
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('5. Crear una nueva organización'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    const newOrgData = {
+      name: 'Organización JavaScript',
+      description: 'Esta es una organización creada desde JavaScript',
+      slug: 'js-org',
+      website: 'https://js-org.example.com',
+      email: 'info@js-org.example.com',
+      phone: '+123456789'
+    };
+    
+    console.log(chalk.green('Haciendo POST a', `${API_URL}/organizations`));
+    console.log('Datos:', JSON.stringify(newOrgData, null, 2));
+    
+    try {
+      const createOrgResponse = await axios.post(`${API_URL}/organizations`, newOrgData, { headers: authHeader });
+      const newOrg = printResponse('Nueva organización creada', createOrgResponse);
+      
+      // Verificar que la organización fue creada correctamente
+      console.log(chalk.green('Verificando la nueva organización creada...'));
+      const verifyOrgResponse = await axios.get(`${API_URL}/organizations/${newOrg.id}`, { headers: authHeader });
+      printResponse('Verificación', verifyOrgResponse);
+    } catch (error) {
+      console.log(chalk.red('Error al crear organización:'), error.response ? error.response.data : error.message);
+    }
+
+    console.log(chalk.blue('\n============================================='));
+    console.log(chalk.blue('Demostración de API completada'));
+    console.log(chalk.blue('=============================================\n'));
+    
+    console.log(chalk.green('Credenciales para uso manual:'));
+    console.log('Email: admin@example.com');
+    console.log('Password: Password123');
+    console.log('Token:', token.substring(0, 30) + '...\n');
+    
+  } catch (error) {
+    console.error(chalk.red('Error en la demostración:'), error.response ? error.response.data : error.message);
+  }
+}
+
+// Ejecutar la demostración
+runDemo();

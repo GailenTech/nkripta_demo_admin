@@ -1,0 +1,452 @@
+{
+  "info": {
+    "name": "nkripta_admin API",
+    "description": "Colección para probar la API de nkripta_admin en entorno local",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Autenticación",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"admin@example.com\",\n    \"password\": \"Password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Iniciar sesión y obtener tokens"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"token\", jsonData.token);",
+                  "pm.environment.set(\"refreshToken\", jsonData.refreshToken);",
+                  "pm.environment.set(\"profileId\", jsonData.profile.id);",
+                  "pm.environment.set(\"organizationId\", jsonData.profile.organization.id);",
+                  "console.log(\"Token JWT guardado en variable de entorno\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mi Perfil",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Obtener información del perfil autenticado"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Renovar tokens usando refreshToken"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados con autenticación"
+    },
+    {
+      "name": "Organizaciones",
+      "item": [
+        {
+          "name": "Obtener Organización",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/organizations/{{organizationId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "organizations",
+                "{{organizationId}}"
+              ]
+            },
+            "description": "Obtener detalles de una organización específica"
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Organización",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Organización de Prueba\",\n    \"description\": \"Esta es una organización creada para probar la API\",\n    \"slug\": \"test-org\",\n    \"website\": \"https://test-org.example.com\",\n    \"email\": \"info@test-org.example.com\",\n    \"phone\": \"+123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/organizations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "organizations"
+              ]
+            },
+            "description": "Crear una nueva organización"
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Organización",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Nombre Actualizado\",\n    \"description\": \"Descripción actualizada\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/organizations/{{organizationId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "organizations",
+                "{{organizationId}}"
+              ]
+            },
+            "description": "Actualizar una organización existente"
+          },
+          "response": []
+        },
+        {
+          "name": "Miembros de Organización",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/organizations/{{organizationId}}/members?page=1&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "organizations",
+                "{{organizationId}}",
+                "members"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Obtener lista de miembros de una organización"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados con organizaciones"
+    },
+    {
+      "name": "Perfiles",
+      "item": [
+        {
+          "name": "Obtener Perfil",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profiles/{{profileId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profiles",
+                "{{profileId}}"
+              ]
+            },
+            "description": "Obtener detalles de un perfil específico"
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Perfil",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"firstName\": \"Nuevo\",\n    \"lastName\": \"Usuario\",\n    \"email\": \"nuevo@example.com\",\n    \"organizationId\": \"{{organizationId}}\",\n    \"roles\": [\"USER\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profiles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profiles"
+              ]
+            },
+            "description": "Crear un nuevo perfil de usuario"
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar Perfil",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"firstName\": \"Nombre Actualizado\",\n    \"lastName\": \"Apellido Actualizado\",\n    \"phone\": \"+123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profiles/{{profileId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profiles",
+                "{{profileId}}"
+              ]
+            },
+            "description": "Actualizar un perfil existente"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados con perfiles de usuario"
+    },
+    {
+      "name": "Suscripciones",
+      "item": [
+        {
+          "name": "Obtener Suscripciones del Perfil",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/billing/profiles/{{profileId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "billing",
+                "profiles",
+                "{{profileId}}"
+              ]
+            },
+            "description": "Obtener suscripciones asociadas a un perfil"
+          },
+          "response": []
+        },
+        {
+          "name": "Crear Suscripción",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"profileId\": \"{{profileId}}\",\n    \"organizationId\": \"{{organizationId}}\",\n    \"planType\": \"basic\",\n    \"paymentMethodId\": \"pm_test_123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/billing/subscriptions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "billing",
+                "subscriptions"
+              ]
+            },
+            "description": "Crear una nueva suscripción"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancelar Suscripción",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/billing/subscriptions/{{subscriptionId}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "billing",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancelar una suscripción existente"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints relacionados con suscripciones y facturación"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    }
+  ]
+}
