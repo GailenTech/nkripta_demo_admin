@@ -14,7 +14,7 @@ wait_for_postgres() {
   host="postgres"
   port="5432"
   
-  while ! timeout 1 bash -c "cat < /dev/null > /dev/tcp/$host/$port"; do
+  while ! nc -z -w 1 $host $port 2>/dev/null; do
     echo -e "${YELLOW}PostgreSQL no está disponible en $host:$port - esperando...${NC}"
     sleep 1
   done
