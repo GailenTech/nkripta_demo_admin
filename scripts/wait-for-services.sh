@@ -10,10 +10,17 @@ NC='\033[0m' # No Color
 wait_for_postgres() {
   echo -e "${YELLOW}Esperando a que PostgreSQL esté listo...${NC}"
   
-  until pg_isready -h postgres -U postgres -d nkripta; do
-    echo -e "${YELLOW}PostgreSQL no está disponible - esperando...${NC}"
+  # Usar un enfoque de conexión TCP en lugar de pg_isready
+  host="postgres"
+  port="5432"
+  
+  while ! nc -z $host $port; do
+    echo -e "${YELLOW}PostgreSQL no está disponible en $host:$port - esperando...${NC}"
     sleep 1
   done
+  
+  # Esperar un poco más para que PostgreSQL termine de inicializar
+  sleep 2
   
   echo -e "${GREEN}PostgreSQL está listo!${NC}"
 }
