@@ -30,7 +30,7 @@ Este paso levantará todos los servicios necesarios (PostgreSQL, LocalStack para
 
 ```bash
 # Levantar todos los servicios
-docker-compose up -d
+docker compose up -d
 ```
 
 Este comando pondrá en marcha:
@@ -40,49 +40,52 @@ Este comando pondrá en marcha:
 - PgAdmin en el puerto 5050
 - La aplicación en el puerto 3000
 
-## 5. Esperar a que los Servicios estén Listos
+## 5. Inicializar el Entorno (Recomendado)
 
-La primera vez que se inician los servicios, se realizan varias tareas de inicialización:
-- Inicialización de la base de datos
-- Configuración de Cognito-local
-- Creación de recursos iniciales
-
-Puedes seguir los logs para ver el progreso:
+Para configurar todo de una sola vez, usa el script de inicialización:
 
 ```bash
-# Ver logs de la aplicación
-docker-compose logs -f app
+# Inicializar todo el entorno (recomendado)
+./scripts/init-environment.sh
 ```
 
-Espera hasta ver un mensaje como "Server running on port 3000" o similar.
+Este script automatiza todos estos pasos:
+- Espera a que los servicios estén listos
+- Crea los recursos necesarios en Cognito
+- Actualiza las variables de entorno
+- Crea los datos iniciales en la base de datos
+- Registra el usuario administrador
 
 ## 6. Verificar que los Servicios están Funcionando
 
 ```bash
 # Comprobar que todos los contenedores están en estado "Up"
-docker-compose ps
+docker compose ps
 ```
 
-## 7. Configurar el Usuario de Prueba
+## 7. Configuración Manual (Alternativa)
 
-La aplicación debería crear automáticamente un usuario de prueba, pero puedes ejecutar el script de configuración para asegurarte:
+Si prefieres configurar el entorno paso a paso manualmente, puedes seguir estas instrucciones:
 
 ```bash
-# Entrar en el contenedor de la aplicación
-docker-compose exec app bash
+# Esperar a que los servicios estén listos
+docker compose exec app bash scripts/wait-for-services.sh
 
-# Ejecutar el script para registrar un usuario de prueba
-node scripts/register-user.js
+# Crear recursos en Cognito
+docker compose exec app node scripts/create-cognito-resources.js
 
-# Salir del contenedor
-exit
+# Crear datos iniciales
+docker compose exec app node scripts/create-test-data.js
+
+# Registrar usuario administrador
+docker compose exec app node scripts/register-user.js
 ```
 
 ## 8. Probar la API con el Script de Demostración
 
 ```bash
 # Entrar en el contenedor de la aplicación
-docker-compose exec app bash
+docker compose exec app bash
 
 # Ejecutar el script de demostración
 node scripts/demo-api.js
@@ -104,7 +107,7 @@ Las pruebas automáticas pueden ejecutarse de tres maneras:
 
 ```bash
 # Entrar en el contenedor de la aplicación
-docker-compose exec app bash
+docker compose exec app bash
 
 # Configurar el entorno de pruebas y ejecutar los tests
 npm run test:with-setup
@@ -117,7 +120,7 @@ exit
 
 ```bash
 # Entrar en el contenedor de la aplicación
-docker-compose exec app bash
+docker compose exec app bash
 
 # Ejecutar tests en modo skip_external
 npm run test:skip-external
@@ -130,7 +133,7 @@ exit
 
 ```bash
 # Entrar en el contenedor de la aplicación
-docker-compose exec app bash
+docker compose exec app bash
 
 # Por ejemplo, para ejecutar solo las pruebas de autenticación
 npm run test:auth
@@ -171,23 +174,23 @@ docker-compose logs app
 Si hay problemas con la autenticación:
 ```bash
 # Ver logs de cognito-local
-docker-compose logs cognito-local
+docker compose logs cognito-local
 
 # Reiniciar el servicio
-docker-compose restart cognito-local
+docker compose restart cognito-local
 
 # Ejecutar nuevamente la configuración de cognito 
-docker-compose exec app node scripts/create-cognito-resources.js
+docker compose exec app node scripts/create-cognito-resources.js
 ```
 
 ### Problemas con la Base de Datos
 
 ```bash
 # Ver logs de PostgreSQL
-docker-compose logs postgres
+docker compose logs postgres
 
 # Verificar la conexión
-docker-compose exec postgres psql -U postgres -c "\l"
+docker compose exec postgres psql -U postgres -c "\l"
 ```
 
 ### Reconstruir Todo desde Cero
@@ -195,10 +198,13 @@ docker-compose exec postgres psql -U postgres -c "\l"
 Si necesitas empezar de nuevo:
 ```bash
 # Detener todos los servicios y eliminar volúmenes
-docker-compose down -v
+docker compose down -v
 
 # Reconstruir e iniciar
-docker-compose up -d --build
+docker compose up -d --build
+
+# Inicializar el entorno nuevamente
+./scripts/init-environment.sh
 ```
 
 ## Estructura del Proyecto
