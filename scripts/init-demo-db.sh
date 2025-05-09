@@ -54,7 +54,7 @@ NODE_ENV=development
 PORT=3000
 
 # PostgreSQL
-DB_HOST=localhost
+DB_HOST=postgres
 DB_PORT=5432
 DB_NAME=nkripta
 DB_USER=postgres

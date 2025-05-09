@@ -31,6 +31,10 @@ docker compose up -d
 echo -e "${YELLOW}Esperando a que los servicios estén disponibles...${NC}"
 sleep 10
 
+# Copiar archivo de configuración para Docker
+echo -e "${YELLOW}Copiando configuración para Docker...${NC}"
+cp .env.docker .env
+
 # Generar datos de demostración
 echo -e "${YELLOW}Generando datos de demostración...${NC}"
 ./scripts/init-demo-db.sh
@@ -45,6 +49,10 @@ fi
 
 # Eliminar archivo de respaldo si existe
 rm -f .env.bak
+
+# Restaurar configuración local para desarrollo fuera de Docker
+echo -e "${YELLOW}Restaurando configuración local para desarrollo...${NC}"
+cp .env.local .env
 
 echo -e "${GREEN}✅ Entorno reiniciado correctamente${NC}"
 echo -e "${YELLOW}Ahora puedes:${NC}"
