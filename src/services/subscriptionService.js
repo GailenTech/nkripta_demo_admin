@@ -270,14 +270,51 @@ class SubscriptionService {
   
   async getAllSubscriptions(filters = {}) {
     try {
-      // Obtener todas las suscripciones con los filtros aplicados
-      const subscriptions = await Subscription.findAll({
-        where: filters,
-        order: [['createdAt', 'DESC']]
-      });
-      
-      // Transformar a formato de respuesta
-      return subscriptions.map(subscription => this.formatSubscriptionResponse(subscription));
+      // Verificar si debemos usar Stripe directamente
+      if (process.env.USE_STRIPE_MOCK === 'true' || process.env.NODE_ENV === 'development') {
+        // Obtener suscripciones desde Stripe
+        logger.info('Obteniendo suscripciones directamente desde Stripe');
+        
+        const stripeSubscriptions = await stripe.subscriptions.list({
+          limit: 100,
+          expand: ['data.customer', 'data.plan.product']
+        });
+        
+        // Transformar las suscripciones de Stripe al formato esperado
+        return stripeSubscriptions.data.map(stripeSub => {
+          // Buscar datos adicionales en la base de datos
+          const subscription = {
+            id: stripeSub.id,
+            stripeSubscriptionId: stripeSub.id,
+            planType: stripeSub.items.data[0].price.id,
+            status: stripeSub.status,
+            currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            createdAt: new Date(stripeSub.created * 1000),
+            updatedAt: new Date(),
+            // Datos del cliente
+            profileId: stripeSub.metadata.profileId || 'desconocido',
+            organizationId: stripeSub.metadata.organizationId || 'desconocido',
+            // Datos adicionales
+            planName: stripeSub.items.data[0].price.product.name || 'Plan Desconocido',
+            planPrice: stripeSub.items.data[0].price.unit_amount / 100,
+            planCurrency: stripeSub.items.data[0].price.currency,
+            customerEmail: stripeSub.customer ? stripeSub.customer.email : 'desconocido'
+          };
+          
+          return subscription;
+        });
+      } else {
+        // Comportamiento original - obtener desde la base de datos
+        const subscriptions = await Subscription.findAll({
+          where: filters,
+          order: [['createdAt', 'DESC']]
+        });
+        
+        // Transformar a formato de respuesta
+        return subscriptions.map(subscription => this.formatSubscriptionResponse(subscription));
+      }
     } catch (error) {
       logger.error('Error al obtener todas las suscripciones:', error);
       throw error;

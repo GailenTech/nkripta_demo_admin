@@ -150,11 +150,14 @@ function App() {
           <TableRow>
             <TableCell>ID</TableCell>
             <TableCell>Plan</TableCell>
+            <TableCell>Precio</TableCell>
             <TableCell>Estado</TableCell>
+            <TableCell>Cliente</TableCell>
             <TableCell>Perfil</TableCell>
             <TableCell>Organización</TableCell>
             <TableCell>Inicio Período</TableCell>
             <TableCell>Fin Período</TableCell>
+            <TableCell>Origen Datos</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -162,15 +165,24 @@ function App() {
             <TableRow key={sub.id || 'unknown'}>
               <TableCell>{sub.id || 'N/A'}</TableCell>
               <TableCell>
-                {sub.planType === 'plan_basic' ? 'Básico (9.99€)' :
-                 sub.planType === 'plan_premium' ? 'Premium (29.99€)' :
-                 (sub.planType || 'N/A')}
+                {sub.planName || 
+                  (sub.planType === 'plan_basic' ? 'Básico' :
+                  sub.planType === 'plan_premium' ? 'Premium' :
+                  (sub.planType || 'N/A'))}
+              </TableCell>
+              <TableCell>
+                {sub.planPrice ? 
+                  `${sub.planPrice} ${sub.planCurrency?.toUpperCase() || 'EUR'}` : 
+                  sub.planType === 'plan_basic' ? '9.99 EUR' :
+                  sub.planType === 'plan_premium' ? '29.99 EUR' : 'N/A'}
               </TableCell>
               <TableCell>{sub.status || 'N/A'}</TableCell>
+              <TableCell>{sub.customerEmail || 'N/A'}</TableCell>
               <TableCell>{sub.profileId || 'N/A'}</TableCell>
               <TableCell>{sub.organizationId || 'N/A'}</TableCell>
               <TableCell>{formatDate(sub.currentPeriodStart)}</TableCell>
               <TableCell>{formatDate(sub.currentPeriodEnd)}</TableCell>
+              <TableCell>{sub.customerEmail ? 'Stripe' : 'BD Local'}</TableCell>
             </TableRow>
           ))}
         </TableBody>
