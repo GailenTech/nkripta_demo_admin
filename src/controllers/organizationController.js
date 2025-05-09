@@ -2,6 +2,18 @@
 const organizationService = require('../services/organizationService');
 const logger = require('../utils/logger');
 
+// Add listOrganizations controller function
+const listOrganizations = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const result = await organizationService.listOrganizations(parseInt(page), parseInt(limit));
+    return res.json(result);
+  } catch (error) {
+    logger.error('Error al listar organizaciones:', error);
+    next(error);
+  }
+};
+
 const createOrganization = async (req, res, next) => {
   try {
     // Solo administradores pueden crear organizaciones
@@ -70,6 +82,7 @@ const getOrganizationMembers = async (req, res, next) => {
 };
 
 module.exports = {
+  listOrganizations,
   createOrganization,
   getOrganization,
   updateOrganization,

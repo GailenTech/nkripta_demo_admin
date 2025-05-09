@@ -6,6 +6,8 @@ const { organizationValidationRules, validateRequest } = require('../utils/valid
 
 const router = express.Router();
 
+// Add a route to get all organizations
+router.get('/', auth, organizationController.listOrganizations);
 router.post('/', auth, checkRole(['ADMIN']), organizationValidationRules, validateRequest, organizationController.createOrganization);
 router.get('/:organizationId', auth, organizationController.getOrganization);
 router.put('/:organizationId', auth, checkRole(['ADMIN']), organizationValidationRules, validateRequest, organizationController.updateOrganization);

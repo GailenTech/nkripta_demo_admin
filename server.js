@@ -14,7 +14,12 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+// Configure CORS to allow the admin UI to connect
+app.use(cors({
+  origin: ['http://localhost:3001', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Middleware para capturar el cuerpo raw para webhooks de Stripe
 app.use((req, res, next) => {

@@ -4,6 +4,28 @@ const { sequelize } = require('../config/database');
 const logger = require('../utils/logger');
 
 class OrganizationService {
+  async listOrganizations(page = 1, limit = 10) {
+    try {
+      const offset = (page - 1) * limit;
+      
+      const result = await Organization.findAndCountAll({
+        limit,
+        offset,
+        order: [['createdAt', 'DESC']]
+      });
+      
+      return {
+        items: result.rows,
+        total: result.count,
+        page,
+        limit,
+        totalPages: Math.ceil(result.count / limit)
+      };
+    } catch (error) {
+      logger.error('Error al listar organizaciones:', error);
+      throw error;
+    }
+  }
   async createOrganization(organizationData, createdById) {
     const transaction = await sequelize.transaction();
     

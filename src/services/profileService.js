@@ -56,8 +56,15 @@ class ProfileService {
     try {
       const offset = (page - 1) * limit;
       
+      // Construct where clause
+      const whereClause = {};
+      if (organizationId) {
+        whereClause.organizationId = organizationId;
+      }
+      
+      // Get all profiles for admin UI
       const result = await Profile.findAndCountAll({
-        where: { organizationId },
+        where: whereClause,
         limit,
         offset,
         include: [{ model: Organization }],

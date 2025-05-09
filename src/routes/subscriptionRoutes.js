@@ -9,6 +9,9 @@ const router = express.Router();
 // Rutas centrales y consistentes para suscripciones
 // ------------------------------------------------
 
+// Ruta principal para compatibilidad con el Admin UI
+router.get('/', auth, subscriptionController.getAllSubscriptions);
+
 // Listar y crear suscripciones
 router.get('/subscriptions', auth, subscriptionController.getAllSubscriptions);
 router.post('/subscriptions', auth, subscriptionValidationRules, validateRequest, subscriptionController.createSubscription);

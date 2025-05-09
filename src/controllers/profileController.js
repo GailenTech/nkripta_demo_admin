@@ -39,10 +39,25 @@ const updateProfile = async (req, res, next) => {
 const listProfiles = async (req, res, next) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const organizationId = req.user.organizationId;
     
+    // For demo purposes, allow admins to get all profiles
+    // This is ONLY for the demo UI, in production you would want more restrictions
+    let organizationId = null;
+    if (req.user.roles && !req.user.roles.includes('ADMIN')) {
+      organizationId = req.user.organizationId;
+    }
+    
+    // Get profiles from service
     const result = await profileService.listProfiles(organizationId, parseInt(page), parseInt(limit));
-    return res.json(result);
+    
+    // Format to match the expected structure in the UI
+    return res.json({
+      items: result.profiles,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages
+    });
   } catch (error) {
     logger.error('Error al listar perfiles:', error);
     next(error);
