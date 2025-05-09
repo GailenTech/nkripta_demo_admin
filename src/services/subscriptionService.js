@@ -1,7 +1,6 @@
 // src/services/subscriptionService.js
 const { stripe } = require('../config/stripe');
-const { Subscription, Profile } = require('../models');
-const { Op } = require('sequelize');
+const { Profile } = require('../models');
 const logger = require('../utils/logger');
 
 class SubscriptionService {
