@@ -87,6 +87,10 @@ else
   echo -e "${YELLOW}No se encontró carpeta de migraciones. Las tablas se crearán automáticamente.${NC}"
 fi
 
+# Corregir tipos ENUM en PostgreSQL
+echo -e "${YELLOW}Corrigiendo tipos ENUM en PostgreSQL...${NC}"
+docker compose exec app node scripts/fix-enum-types.js
+
 # Ejecutar el script de generación de datos de demostración
 echo -e "${YELLOW}Generando datos de demostración...${NC}"
 docker compose exec app node scripts/generate-demo-data.js

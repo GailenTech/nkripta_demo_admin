@@ -35,6 +35,10 @@ sleep 10
 echo -e "${YELLOW}Copiando configuración para Docker...${NC}"
 cp .env.docker .env
 
+# Corregir tipos ENUM en PostgreSQL
+echo -e "${YELLOW}Corrigiendo tipos ENUM en PostgreSQL...${NC}"
+docker compose exec app node scripts/fix-enum-types.js
+
 # Generar datos de demostración
 echo -e "${YELLOW}Generando datos de demostración...${NC}"
 ./scripts/init-demo-db.sh

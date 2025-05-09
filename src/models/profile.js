@@ -55,8 +55,22 @@ const Profile = sequelize.define('Profile', {
     allowNull: true
   },
   roles: {
-    type: DataTypes.ARRAY(DataTypes.ENUM('USER', 'ADMIN')),
-    defaultValue: ['USER']
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    defaultValue: ['USER'],
+    validate: {
+      isValidRole(value) {
+        if (!Array.isArray(value)) {
+          throw new Error('Roles must be an array');
+        }
+        
+        const validRoles = ['USER', 'ADMIN'];
+        for (const role of value) {
+          if (!validRoles.includes(role)) {
+            throw new Error(`Role "${role}" is not valid. Valid roles are: ${validRoles.join(', ')}`);
+          }
+        }
+      }
+    }
   },
   organizationId: {
     type: DataTypes.UUID,

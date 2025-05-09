@@ -30,9 +30,26 @@ Puedes usar el script de configuración que automatiza todos los pasos:
 O puedes iniciar los contenedores manualmente:
 
 ```bash
+# Cambiar a configuración Docker
+./scripts/switch-env.sh docker
+
 # Iniciar todos los servicios
 docker compose up -d
 ```
+
+### Cambiar entre entornos Docker y Local
+
+El proyecto incluye un script para facilitar el cambio entre configuraciones de Docker y desarrollo local:
+
+```bash
+# Para desarrollo con Docker
+./scripts/switch-env.sh docker
+
+# Para desarrollo local (sin Docker)
+./scripts/switch-env.sh local
+```
+
+Este script copia el archivo de configuración adecuado (.env.docker o .env.local) a .env, asegurando que los valores de conexión a la base de datos y otros servicios sean correctos para cada entorno.
 
 ### Acceder a los servicios
 
@@ -141,7 +158,24 @@ Este script:
 1. Verifica que los servicios Docker estén en ejecución
 2. Crea la base de datos si no existe
 3. Configura las variables de entorno necesarias
-4. Genera datos de demostración realistas
+4. Corrige problemas de tipos ENUM en PostgreSQL (ver nota abajo)
+5. Genera datos de demostración realistas
+
+### Nota sobre tipos ENUM en PostgreSQL
+
+Este proyecto incluye un script `fix-enum-types.js` que soluciona un problema conocido con los tipos ENUM array en PostgreSQL. El problema ocurre específicamente con el campo `roles` en el modelo `Profile`, que utiliza un array de ENUMs. 
+
+El script:
+- Detecta si hay problemas con el tipo ENUM en la columna `roles`
+- Migra los datos a un array de strings con validación
+- Se ejecuta automáticamente durante la inicialización de la base de datos
+
+Si encuentras errores como `cannot cast type "enum_Profile_roles"[] to "enum_Profile_roles"` o `column "roles" is of type "enum_Profile_roles"[] but default expression is of type character varying[]`, puedes ejecutar manualmente:
+
+```bash
+# Corregir problemas con tipos ENUM en PostgreSQL
+node scripts/fix-enum-types.js
+```
 
 ### Datos de demostración incluidos
 

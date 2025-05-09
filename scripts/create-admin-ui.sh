@@ -54,7 +54,7 @@ npm init -y
 
 # Instalar dependencias
 echo -e "${BLUE}Instalando dependencias...${NC}"
-npm install react-admin ra-data-simple-rest @mui/material @emotion/react @emotion/styled react react-dom react-router-dom
+npm install --legacy-peer-deps react-admin ra-data-simple-rest@4.16.20 @mui/material @emotion/react @emotion/styled react react-dom react-router-dom
 
 # Crear estructura de directorios
 echo -e "${BLUE}Creando estructura de directorios...${NC}"
@@ -533,7 +533,7 @@ EOF
 
 # Instalar dependencias de desarrollo
 echo -e "${BLUE}Instalando dependencias de desarrollo...${NC}"
-npm install --save-dev @vitejs/plugin-react vite
+npm install --legacy-peer-deps --save-dev @vitejs/plugin-react vite
 
 # Volver al directorio original
 cd "$CURRENT_DIR"
