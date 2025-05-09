@@ -156,7 +156,70 @@ class SubscriptionService {
 
   async getSubscription(subscriptionId) {
     try {
-      // Obtener directamente desde Stripe
+      // Si estamos en entorno de prueba/desarrollo y USE_STRIPE_MOCK está activo
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      
+      // Verificar si es un ID de suscripción generado por mock
+      const isMockId = subscriptionId.includes('_');
+      
+      if (useStripeMock && isMockId) {
+        // Es un ID de mock, así que extraemos la información del ID
+        const parts = subscriptionId.split('_');
+        if (parts.length >= 3) {
+          const profileIdPart = parts[1]; // Formato esperado: sub_profileId_planType_index
+          const planType = parts[2]; // basic, premium, enterprise
+          
+          // Buscar el perfil
+          try {
+            // Intentar encontrar el perfil que contenga este fragmento en su ID
+            const profiles = await Profile.findAll();
+            const profile = profiles.find(p => p.id.includes(profileIdPart));
+            
+            if (profile) {
+              // Encontrado el perfil, generar una suscripción de prueba
+              let planName = 'Plan Desconocido';
+              let planPrice = 0;
+              
+              if (planType === 'basic') {
+                planName = 'Plan Básico';
+                planPrice = 9.99;
+              } else if (planType === 'premiu') {
+                planName = 'Plan Premium';
+                planPrice = 29.99;
+              } else if (planType === 'enterp') {
+                planName = 'Plan Enterprise';
+                planPrice = 99.99;
+              }
+              
+              // Generar fechas realistas
+              const now = new Date();
+              const periodStartDate = new Date(now);
+              periodStartDate.setDate(now.getDate() - 15); // 15 días atrás
+              const periodEndDate = new Date(now);
+              periodEndDate.setDate(periodStartDate.getDate() + 30); // +30 días desde inicio
+              
+              return {
+                subscriptionId: subscriptionId,
+                profileId: profile.id,
+                organizationId: profile.organizationId,
+                planType: `plan_${planType}`,
+                planName: planName,
+                planPrice: planPrice,
+                planCurrency: 'eur',
+                status: 'active',
+                currentPeriodStart: periodStartDate,
+                currentPeriodEnd: periodEndDate,
+                cancelAtPeriodEnd: false,
+                customerEmail: profile.email || ''
+              };
+            }
+          } catch (mockError) {
+            logger.warn('Error al buscar perfil para suscripción mock:', mockError.message);
+          }
+        }
+      }
+      
+      // Si no es un mock o no pudimos encontrar el perfil, procedemos con Stripe
       let stripeSubscription;
       try {
         stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
@@ -236,7 +299,45 @@ class SubscriptionService {
       // Obtener el perfil para encontrar el Stripe Customer ID
       const profile = await Profile.findByPk(profileId);
       
-      if (!profile || !profile.stripeCustomerId) {
+      if (!profile) {
+        return []; // Si no existe el perfil, no hay suscripciones
+      }
+      
+      // Si estamos en entorno de prueba/desarrollo y USE_STRIPE_MOCK está activo
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      if (useStripeMock) {
+        logger.info(`Usando datos de prueba para suscripciones del perfil ${profileId}`);
+        
+        // Primero intentamos obtener datos reales de Stripe Mock
+        try {
+          if (profile.stripeCustomerId) {
+            const stripeSubscriptions = await stripe.subscriptions.list({
+              customer: profile.stripeCustomerId,
+              limit: 100,
+              expand: ['data.customer', 'data.plan.product']
+            });
+            
+            // Verificar si tenemos suscripciones y si todas tienen el mismo ID (problema común en Stripe Mock)
+            if (stripeSubscriptions.data && stripeSubscriptions.data.length > 0) {
+              // Si todas las suscripciones tienen el mismo ID, generamos datos de prueba personalizados en su lugar
+              const allSameId = stripeSubscriptions.data.every(sub => sub.id === stripeSubscriptions.data[0].id);
+              
+              if (!allSameId) {
+                // Si los IDs son diferentes, usar los datos reales de Stripe Mock
+                return this._formatStripeSubscriptions(stripeSubscriptions.data, profile);
+              }
+            }
+          }
+        } catch (mockError) {
+          logger.warn('Error al obtener datos de Stripe Mock, usando datos de prueba:', mockError.message);
+        }
+        
+        // Si llegamos aquí, generamos datos de prueba personalizados
+        return this._generateMockSubscriptions(profile);
+      }
+      
+      // En entorno de producción, intentamos obtener los datos reales
+      if (!profile.stripeCustomerId) {
         return []; // Si no tiene Stripe Customer ID, no tiene suscripciones
       }
       
@@ -248,155 +349,199 @@ class SubscriptionService {
       });
       
       // Transformar las suscripciones de Stripe al formato esperado
-      return stripeSubscriptions.data.map(stripeSub => {
-        // Determinar el tipo de plan basado en el precio
-        let planType = 'desconocido';
-        let planName = 'Plan Desconocido';
-        let planPrice = 0;
-        let planCurrency = 'eur';
-        
-        if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
-          const item = stripeSub.items.data[0];
-          
-          // Intentar obtener el ID del precio
-          if (item.price && item.price.id) {
-            planType = item.price.id;
-          }
-          
-          // Intentar determinar plan por precio
-          if (item.price && item.price.unit_amount) {
-            if (item.price.unit_amount === 999) {
-              planType = 'plan_basic';
-              planName = 'Plan Básico';
-              planPrice = 9.99;
-            } else if (item.price.unit_amount === 2999) {
-              planType = 'plan_premium';
-              planName = 'Plan Premium';
-              planPrice = 29.99;
-            } else {
-              planPrice = item.price.unit_amount / 100;
-            }
-          }
-          
-          // Intentar obtener nombre del producto
-          if (item.price && item.price.product && typeof item.price.product === 'object') {
-            planName = item.price.product.name || planName;
-          }
-          
-          // Intentar obtener moneda
-          if (item.price && item.price.currency) {
-            planCurrency = item.price.currency;
-          }
-        }
-        
-        return {
-          subscriptionId: stripeSub.id,
-          profileId: profileId,
-          organizationId: profile.organizationId,
-          planType: planType,
-          planName: planName,
-          planPrice: planPrice,
-          planCurrency: planCurrency,
-          status: stripeSub.status,
-          currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-          currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
-          cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-          createdAt: new Date(stripeSub.created * 1000)
-        };
-      });
+      return this._formatStripeSubscriptions(stripeSubscriptions.data, profile);
     } catch (error) {
       logger.error('Error al obtener suscripciones del perfil:', error);
       return []; // Devolver array vacío para evitar error 500 en la API
     }
   }
   
-  async getAllSubscriptions() {
-    try {
-      // Obtener todas las suscripciones directamente desde Stripe
-      try {
-        // Comprobar que Stripe Mock está activo
-        let stripeStatus;
-        try {
-          // Hacemos una petición simple para comprobar que el servicio está activo
-          stripeStatus = await stripe.balance.retrieve();
-          logger.info('Conexión con Stripe Mock verificada.');
-        } catch (stripeConnectionError) {
-          logger.error('No se pudo establecer conexión con Stripe Mock:', stripeConnectionError.message);
-          throw new Error('No se pudo establecer conexión con Stripe Mock');
+  // Método auxiliar para formatear suscripciones de Stripe
+  _formatStripeSubscriptions(stripeSubscriptions, profile) {
+    return stripeSubscriptions.map(stripeSub => {
+      // Determinar el tipo de plan basado en el precio
+      let planType = 'desconocido';
+      let planName = 'Plan Desconocido';
+      let planPrice = 0;
+      let planCurrency = 'eur';
+      
+      if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
+        const item = stripeSub.items.data[0];
+        
+        // Intentar obtener el ID del precio
+        if (item.price && item.price.id) {
+          planType = item.price.id;
         }
         
-        const stripeSubscriptions = await stripe.subscriptions.list({
-          limit: 100,
-          expand: ['data.customer', 'data.plan.product']
-        });
+        // Intentar determinar plan por precio
+        if (item.price && item.price.unit_amount) {
+          if (item.price.unit_amount === 999) {
+            planType = 'plan_basic';
+            planName = 'Plan Básico';
+            planPrice = 9.99;
+          } else if (item.price.unit_amount === 2999) {
+            planType = 'plan_premium';
+            planName = 'Plan Premium';
+            planPrice = 29.99;
+          } else {
+            planPrice = item.price.unit_amount / 100;
+          }
+        }
         
-        // Transformar las suscripciones de Stripe al formato esperado
-        return stripeSubscriptions.data.map(stripeSub => {
-          // Determinar el tipo de plan basado en el precio
-          let planType = 'desconocido';
-          let planName = 'Plan Desconocido';
-          let planPrice = 0;
-          let planCurrency = 'eur';
+        // Intentar obtener nombre del producto
+        if (item.price && item.price.product && typeof item.price.product === 'object') {
+          planName = item.price.product.name || planName;
+        }
+        
+        // Intentar obtener moneda
+        if (item.price && item.price.currency) {
+          planCurrency = item.price.currency;
+        }
+      }
+      
+      return {
+        subscriptionId: stripeSub.id,
+        profileId: profile.id,
+        organizationId: profile.organizationId,
+        planType: planType,
+        planName: planName,
+        planPrice: planPrice,
+        planCurrency: planCurrency,
+        status: stripeSub.status,
+        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        createdAt: new Date(stripeSub.created * 1000)
+      };
+    });
+  }
+  
+  // Método para generar datos de prueba realistas basados en el perfil
+  _generateMockSubscriptions(profile) {
+    // Decidir cuántas suscripciones generar (0-2) basado en el ID del perfil
+    // Convertimos el ID a un número para tener algo determinístico
+    const profileIdSum = profile.id
+      .split('')
+      .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    
+    // 30% de perfiles sin suscripciones, 50% con una suscripción, 20% con dos
+    const numSubscriptions = profileIdSum % 10 < 3 ? 0 : (profileIdSum % 10 < 8 ? 1 : 2);
+    
+    if (numSubscriptions === 0) {
+      return [];
+    }
+    
+    const mockSubscriptions = [];
+    
+    // Planes disponibles para datos de prueba
+    const plans = [
+      { type: 'plan_basic', name: 'Plan Básico', price: 9.99 },
+      { type: 'plan_premium', name: 'Plan Premium', price: 29.99 },
+      { type: 'plan_enterprise', name: 'Plan Enterprise', price: 99.99 }
+    ];
+    
+    // Estados disponibles
+    const statuses = ['active', 'active', 'active', 'past_due', 'canceled']; // Más probabilidad de activos
+    
+    // Fecha actual
+    const now = new Date();
+    
+    // Generar suscripciones aleatorias pero determinísticas basadas en el ID del perfil
+    for (let i = 0; i < numSubscriptions; i++) {
+      // Seleccionar plan basado en el ID del perfil y el índice actual
+      const planIndex = (profileIdSum + i) % plans.length;
+      const plan = plans[planIndex];
+      
+      // Seleccionar estado
+      const statusIndex = (profileIdSum + i * 3) % statuses.length;
+      const status = statuses[statusIndex];
+      
+      // Generar fechas realistas
+      const createdMonthsAgo = ((profileIdSum + i) % 12) + 1; // 1-12 meses atrás
+      const createdDate = new Date(now);
+      createdDate.setMonth(now.getMonth() - createdMonthsAgo);
+      
+      // Período actual (ajustado según el estado)
+      const periodStartDate = new Date(now);
+      const periodEndDate = new Date(now);
+      
+      if (status === 'active' || status === 'past_due') {
+        // Período actual: empezó hace menos de 30 días y termina en el futuro
+        periodStartDate.setDate(now.getDate() - ((profileIdSum + i) % 28)); // 0-27 días atrás
+        periodEndDate.setDate(periodStartDate.getDate() + 30); // +30 días desde inicio
+      } else {
+        // Período terminado: empezó y terminó en el pasado
+        periodStartDate.setDate(now.getDate() - 60 - ((profileIdSum + i) % 30)); // 60-89 días atrás
+        periodEndDate.setDate(periodStartDate.getDate() + 30); // +30 días desde ese inicio
+      }
+      
+      // Crear un ID único basado en el perfil y el tipo de plan
+      const uniqueId = `sub_${profile.id.substring(0, 8)}_${plan.type.substring(5, 11)}_${i}`;
+      
+      mockSubscriptions.push({
+        subscriptionId: uniqueId,
+        profileId: profile.id,
+        organizationId: profile.organizationId,
+        planType: plan.type,
+        planName: plan.name,
+        planPrice: plan.price,
+        planCurrency: 'eur',
+        status: status,
+        currentPeriodStart: periodStartDate,
+        currentPeriodEnd: periodEndDate,
+        cancelAtPeriodEnd: status === 'canceled',
+        createdAt: createdDate
+      });
+    }
+    
+    return mockSubscriptions;
+  }
+  
+  async getAllSubscriptions() {
+    try {
+      // Si estamos en entorno de prueba/desarrollo y USE_STRIPE_MOCK está activo
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      
+      if (useStripeMock) {
+        logger.info('Usando datos de prueba para todas las suscripciones');
+        
+        // Intentar obtener datos reales de Stripe Mock primero
+        try {
+          // Verificar conexión con Stripe Mock
+          await stripe.balance.retrieve();
           
-          if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
-            const item = stripeSub.items.data[0];
+          const stripeSubscriptions = await stripe.subscriptions.list({
+            limit: 100,
+            expand: ['data.customer', 'data.plan.product']
+          });
+          
+          // Verificar si todos los IDs son iguales (problema común en Stripe Mock)
+          if (stripeSubscriptions.data && stripeSubscriptions.data.length > 1) {
+            const allSameId = stripeSubscriptions.data.every(sub => 
+              sub.id === stripeSubscriptions.data[0].id
+            );
             
-            // Intentar obtener el ID del precio
-            if (item.price && item.price.id) {
-              planType = item.price.id;
-            }
-            
-            // Intentar determinar plan por precio
-            if (item.price && item.price.unit_amount) {
-              if (item.price.unit_amount === 999) {
-                planType = 'plan_basic';
-                planName = 'Plan Básico';
-                planPrice = 9.99;
-              } else if (item.price.unit_amount === 2999) {
-                planType = 'plan_premium';
-                planName = 'Plan Premium';
-                planPrice = 29.99;
-              } else {
-                planPrice = item.price.unit_amount / 100;
-              }
-            }
-            
-            // Intentar obtener nombre del producto
-            if (item.price && item.price.product && typeof item.price.product === 'object') {
-              planName = item.price.product.name || planName;
-            }
-            
-            // Intentar obtener moneda
-            if (item.price && item.price.currency) {
-              planCurrency = item.price.currency;
+            if (!allSameId) {
+              // Si los IDs son diferentes, usar los datos reales
+              return this._formatAllStripeSubscriptions(stripeSubscriptions.data);
             }
           }
-          
-          // Extraer metadata
-          const profileId = stripeSub.metadata?.profileId || '';
-          const organizationId = stripeSub.metadata?.organizationId || '';
-          
-          return {
-            subscriptionId: stripeSub.id,
-            profileId: profileId,
-            organizationId: organizationId,
-            planType: planType,
-            planName: planName,
-            planPrice: planPrice,
-            planCurrency: planCurrency,
-            status: stripeSub.status,
-            currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-            currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
-            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-            createdAt: new Date(stripeSub.created * 1000),
-            customerEmail: stripeSub.customer?.email || ''
-          };
-        });
-      } catch (stripeError) {
-        // Si hay error con Stripe, logearlo y devolver array vacío
-        logger.error('Error al conectar con Stripe:', stripeError);
-        return [];
+        } catch (mockError) {
+          logger.warn('Error al obtener datos de Stripe Mock, generando datos de prueba:', mockError.message);
+        }
+        
+        // Si llegamos aquí, generamos datos de prueba para todas las suscripciones
+        return this._generateAllMockSubscriptions();
       }
+      
+      // En entorno de producción, intentamos obtener los datos reales
+      const stripeSubscriptions = await stripe.subscriptions.list({
+        limit: 100,
+        expand: ['data.customer', 'data.plan.product']
+      });
+      
+      // Transformar las suscripciones de Stripe al formato esperado
+      return this._formatAllStripeSubscriptions(stripeSubscriptions.data);
     } catch (error) {
       logger.error('Error al obtener todas las suscripciones:', error);
       // Devolver array vacío para evitar error 500 en la API
@@ -404,9 +549,128 @@ class SubscriptionService {
     }
   }
   
+  // Método auxiliar para formatear todas las suscripciones de Stripe
+  _formatAllStripeSubscriptions(stripeSubscriptions) {
+    return stripeSubscriptions.map(stripeSub => {
+      // Determinar el tipo de plan basado en el precio
+      let planType = 'desconocido';
+      let planName = 'Plan Desconocido';
+      let planPrice = 0;
+      let planCurrency = 'eur';
+      
+      if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
+        const item = stripeSub.items.data[0];
+        
+        // Intentar obtener el ID del precio
+        if (item.price && item.price.id) {
+          planType = item.price.id;
+        }
+        
+        // Intentar determinar plan por precio
+        if (item.price && item.price.unit_amount) {
+          if (item.price.unit_amount === 999) {
+            planType = 'plan_basic';
+            planName = 'Plan Básico';
+            planPrice = 9.99;
+          } else if (item.price.unit_amount === 2999) {
+            planType = 'plan_premium';
+            planName = 'Plan Premium';
+            planPrice = 29.99;
+          } else {
+            planPrice = item.price.unit_amount / 100;
+          }
+        }
+        
+        // Intentar obtener nombre del producto
+        if (item.price && item.price.product && typeof item.price.product === 'object') {
+          planName = item.price.product.name || planName;
+        }
+        
+        // Intentar obtener moneda
+        if (item.price && item.price.currency) {
+          planCurrency = item.price.currency;
+        }
+      }
+      
+      // Extraer metadata
+      const profileId = stripeSub.metadata?.profileId || '';
+      const organizationId = stripeSub.metadata?.organizationId || '';
+      
+      return {
+        subscriptionId: stripeSub.id,
+        profileId: profileId,
+        organizationId: organizationId,
+        planType: planType,
+        planName: planName,
+        planPrice: planPrice,
+        planCurrency: planCurrency,
+        status: stripeSub.status,
+        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        createdAt: new Date(stripeSub.created * 1000),
+        customerEmail: stripeSub.customer?.email || ''
+      };
+    });
+  }
+  
+  // Método para generar datos de prueba de todas las suscripciones
+  async _generateAllMockSubscriptions() {
+    try {
+      // Obtener todos los perfiles
+      const profiles = await Profile.findAll();
+      const allMockSubscriptions = [];
+      
+      // Generar suscripciones de prueba para cada perfil
+      for (const profile of profiles) {
+        const profileSubscriptions = this._generateMockSubscriptions(profile);
+        allMockSubscriptions.push(...profileSubscriptions);
+      }
+      
+      return allMockSubscriptions;
+    } catch (error) {
+      logger.error('Error al generar datos de prueba para todas las suscripciones:', error);
+      return [];
+    }
+  }
+  
   async canManageSubscription(subscriptionId, profileId, organizationId, roles = []) {
     try {
-      // Obtener la suscripción directamente desde Stripe
+      // Verificar si es un ID de suscripción generado por mock
+      const isMockId = subscriptionId.includes('_');
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      
+      if (useStripeMock && isMockId) {
+        // Es un ID de mock, extraer info
+        const parts = subscriptionId.split('_');
+        if (parts.length >= 3) {
+          const profileIdPart = parts[1]; // Formato esperado: sub_profileId_planType_index
+          
+          // Comprobar si el perfil actual coincide parcialmente con el ID
+          if (profileId.includes(profileIdPart)) {
+            return true; // Es el propietario
+          }
+          
+          // Si es admin, verificar si pertenece a la misma organización
+          if (roles.includes('ADMIN')) {
+            // Intentar encontrar el perfil que coincida con este fragmento
+            try {
+              const profiles = await Profile.findAll();
+              const profile = profiles.find(p => p.id.includes(profileIdPart));
+              
+              if (profile && profile.organizationId === organizationId) {
+                return true; // Es admin y de la misma organización
+              }
+            } catch (mockError) {
+              logger.warn('Error al verificar permisos para suscripción mock:', mockError.message);
+            }
+          }
+          
+          return false;
+        }
+      }
+      
+      // Si no es un mock o continuar con Stripe
       let stripeSubscription;
       try {
         stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
