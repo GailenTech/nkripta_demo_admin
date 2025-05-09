@@ -85,6 +85,37 @@ npm test
 npm run test:sequential-with-reports
 ```
 
+## Interfaz de Administración
+
+El proyecto incluye un script para generar una interfaz de administración de demostración basada en React Admin:
+
+```bash
+# Crear la interfaz de administración
+./scripts/create-admin-ui.sh
+```
+
+### Iniciar la interfaz de administración
+
+```bash
+# Navegar al directorio de la interfaz
+cd nkripta-admin-ui
+
+# Instalar dependencias
+npm install
+
+# Iniciar la interfaz (se abrirá en http://localhost:3001)
+npm start
+```
+
+### Características de la interfaz
+
+- **Dashboard** con información general
+- **Gestión de organizaciones** - Visualización y edición
+- **Gestión de perfiles** - Visualización y edición de usuarios
+- **Gestión de suscripciones** - Visualización y edición de planes
+
+Para más detalles sobre la arquitectura propuesta, consulte [docs/admin-ui-proposal.md](docs/admin-ui-proposal.md).
+
 ## Credenciales para pruebas
 
 Para el entorno de desarrollo local:
