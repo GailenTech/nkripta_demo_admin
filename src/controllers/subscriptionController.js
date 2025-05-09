@@ -129,11 +129,11 @@ const handleWebhook = async (req, res, next) => {
   }
 };
 
-// Método para listar todas las suscripciones (con filtros)
+// Método para listar todas las suscripciones (sólo disponible para administradores)
 const getAllSubscriptions = async (req, res, next) => {
   try {
     // Extraer parámetros de filtrado
-    const { profileId, status, planId } = req.query;
+    const { profileId } = req.query;
     
     // Si hay un profileId en la query, redirigir a getProfileSubscriptions
     if (profileId) {
@@ -141,21 +141,14 @@ const getAllSubscriptions = async (req, res, next) => {
       return getProfileSubscriptions(req, res, next);
     }
     
-    // Obtener todas las suscripciones con los filtros aplicados
-    const filters = { };
-    
-    // Aplicar filtros si existen
-    if (status) filters.status = status;
-    if (planId) filters.planType = planId;
-    
-    // Los administradores pueden ver todas, los usuarios solo las de su organización
+    // Solo los administradores pueden ver todas las suscripciones
     const isAdmin = (req.user.roles || []).includes('ADMIN');
     if (!isAdmin) {
-      filters.organizationId = req.user.organizationId;
+      return res.status(403).json({ message: 'Solo los administradores pueden ver todas las suscripciones' });
     }
     
     try {
-      const subscriptions = await subscriptionService.getAllSubscriptions(filters);
+      const subscriptions = await subscriptionService.getAllSubscriptions();
       
       return res.json({
         count: subscriptions.length,
