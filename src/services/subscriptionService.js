@@ -47,28 +47,35 @@ class SubscriptionService {
         throw new Error('Perfil no encontrado');
       }
       
-      // Verificar si ya existe una suscripción activa para este plan
-      const existingSubscription = await Subscription.findOne({
-        where: {
-          profileId,
-          planType: planId,
-          status: {
-            [Op.in]: ['active', 'trialing', 'past_due'] // Estados considerados "activos"
-          }
-        }
-      });
-      
-      if (existingSubscription) {
-        const error = new Error('Ya existe una suscripción activa para este plan');
-        error.statusCode = 409; // Conflict
-        throw error;
-      }
+      // Verificar si ya existe una suscripción activa para este plan en Stripe
+      let existingSubscription = null;
       
       // Obtener o crear cliente en Stripe
       if (!profile.stripeCustomerId) {
         await this.createCustomer(profileId);
         // Refrescar el perfil para obtener el ID de cliente actualizado
         await profile.reload();
+      }
+      
+      try {
+        // Verificar suscripciones existentes en Stripe
+        const stripeSubscriptions = await stripe.subscriptions.list({
+          customer: profile.stripeCustomerId,
+          status: 'active',
+          price: planId
+        });
+        
+        if (stripeSubscriptions.data && stripeSubscriptions.data.length > 0) {
+          existingSubscription = stripeSubscriptions.data[0];
+        }
+      } catch (stripeError) {
+        logger.warn('Error al verificar suscripciones existentes en Stripe:', stripeError.message);
+      }
+      
+      if (existingSubscription) {
+        const error = new Error('Ya existe una suscripción activa para este plan');
+        error.statusCode = 409; // Conflict
+        throw error;
       }
       
       // Asociar método de pago al cliente
@@ -88,43 +95,10 @@ class SubscriptionService {
         customer: profile.stripeCustomerId,
         items: [{ price: planId }],
         expand: ['latest_invoice.payment_intent'],
-      });
-      
-      // Procesar fechas de Stripe (pueden ser timestamps UNIX o ya estar en formato Date)
-      let currentPeriodStart, currentPeriodEnd;
-      
-      try {
-        // Intentar convertir los timestamps de Stripe (asumiendo que son segundos UNIX)
-        currentPeriodStart = subscription.current_period_start ? 
-                            new Date(subscription.current_period_start * 1000) : 
-                            new Date();
-        currentPeriodEnd = subscription.current_period_end ? 
-                          new Date(subscription.current_period_end * 1000) : 
-                          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 días después
-                          
-        // Verificar si las fechas son válidas
-        if (isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
-          // Si no son válidas, usar fechas actuales
-          currentPeriodStart = new Date();
-          currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        metadata: {
+          profileId: profileId,
+          organizationId: organizationId
         }
-      } catch (error) {
-        // En caso de error, usar fechas predeterminadas
-        logger.error('Error al procesar fechas de suscripción:', error);
-        currentPeriodStart = new Date();
-        currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      }
-      
-      // Guardar la suscripción en la base de datos
-      const dbSubscription = await Subscription.create({
-        stripeSubscriptionId: subscription.id,
-        profileId,
-        organizationId,
-        planType: planId,
-        status: subscription.status || 'active',
-        currentPeriodStart,
-        currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end || false
       });
       
       // Extraer el client_secret con manejo de errores (puede no existir en el mock)
@@ -146,7 +120,6 @@ class SubscriptionService {
       }
       
       return {
-        id: dbSubscription.id,
         subscriptionId: subscription.id,
         status: subscription.status || 'active',
         clientSecret
@@ -162,40 +135,18 @@ class SubscriptionService {
 
   async cancelSubscription(subscriptionId) {
     try {
-      // Primero intentamos buscar por Stripe ID
-      let subscription = await Subscription.findOne({
-        where: { stripeSubscriptionId: subscriptionId }
-      });
-      
-      // Si no se encuentra, intentamos buscar por ID interno
-      if (!subscription) {
-        subscription = await Subscription.findByPk(subscriptionId);
-      }
-      
-      if (!subscription) {
-        throw new Error('Suscripción no encontrada');
-      }
-      
-      // Cancelar en Stripe si es posible
-      let stripeStatus = 'canceled'; // Por defecto si no podemos comunicarnos con Stripe
+      // Cancelar directamente en Stripe
+      let canceledSubscription;
       try {
-        const canceledSubscription = await stripe.subscriptions.cancel(subscription.stripeSubscriptionId);
-        stripeStatus = canceledSubscription.status;
+        canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
       } catch (stripeError) {
-        // Si hay un error con Stripe, continuamos con la cancelación local
-        logger.warn('Error al cancelar en Stripe, continuando con cancelación local:', stripeError.message);
+        logger.error('Error al cancelar en Stripe:', stripeError.message);
+        throw new Error(`No se pudo cancelar la suscripción: ${stripeError.message}`);
       }
-      
-      // Actualizar en la base de datos
-      subscription.status = 'canceled';
-      subscription.cancelAtPeriodEnd = true;
-      subscription.updatedAt = new Date();
-      await subscription.save();
       
       return { 
-        status: stripeStatus,
-        id: subscription.id,
-        stripeSubscriptionId: subscription.stripeSubscriptionId,
+        status: canceledSubscription.status,
+        subscriptionId: canceledSubscription.id,
         message: 'Suscripción cancelada exitosamente'
       };
     } catch (error) {
@@ -206,45 +157,74 @@ class SubscriptionService {
 
   async getSubscription(subscriptionId) {
     try {
-      // Primero intentamos buscar por Stripe ID
-      let subscription = await Subscription.findOne({
-        where: { stripeSubscriptionId: subscriptionId }
-      });
-      
-      // Si no se encuentra, intentamos buscar por ID interno
-      if (!subscription) {
-        subscription = await Subscription.findByPk(subscriptionId);
-      }
-      
-      if (!subscription) {
-        throw new Error('Suscripción no encontrada');
-      }
-      
+      // Obtener directamente desde Stripe
+      let stripeSubscription;
       try {
-        // Obtener detalles actualizados de Stripe si es posible
-        const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
-        
-        // Actualizar el estado en la base de datos si ha cambiado
-        if (subscription.status !== stripeSubscription.status) {
-          subscription.status = stripeSubscription.status;
-          subscription.updatedAt = new Date();
-          await subscription.save();
-        }
+        stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
+          expand: ['customer', 'plan.product']
+        });
       } catch (stripeError) {
-        // Si hay un error al obtener datos de Stripe, continuamos con los datos locales
-        logger.warn('No se pudo obtener información actualizada de Stripe:', stripeError.message);
+        logger.error('Error al obtener suscripción de Stripe:', stripeError.message);
+        throw new Error(`No se pudo encontrar la suscripción: ${stripeError.message}`);
+      }
+      
+      // Extraer metadata (puede ser nula en stripe mock)
+      const profileId = stripeSubscription.metadata?.profileId || '';
+      const organizationId = stripeSubscription.metadata?.organizationId || '';
+      
+      // Determinar el tipo de plan basado en el precio
+      let planType = 'desconocido';
+      let planName = 'Plan Desconocido';
+      let planPrice = 0;
+      let planCurrency = 'eur';
+      
+      if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
+        const item = stripeSubscription.items.data[0];
+        
+        // Intentar obtener el ID del precio
+        if (item.price && item.price.id) {
+          planType = item.price.id;
+        }
+        
+        // Intentar determinar plan por precio
+        if (item.price && item.price.unit_amount) {
+          if (item.price.unit_amount === 999) {
+            planType = 'plan_basic';
+            planName = 'Plan Básico';
+            planPrice = 9.99;
+          } else if (item.price.unit_amount === 2999) {
+            planType = 'plan_premium';
+            planName = 'Plan Premium';
+            planPrice = 29.99;
+          } else {
+            planPrice = item.price.unit_amount / 100;
+          }
+        }
+        
+        // Intentar obtener nombre del producto
+        if (item.price && item.price.product && typeof item.price.product === 'object') {
+          planName = item.price.product.name || planName;
+        }
+        
+        // Intentar obtener moneda
+        if (item.price && item.price.currency) {
+          planCurrency = item.price.currency;
+        }
       }
       
       return {
-        id: subscription.id,
-        stripeSubscriptionId: subscription.stripeSubscriptionId,
-        profileId: subscription.profileId,
-        organizationId: subscription.organizationId,
-        planType: subscription.planType,
-        status: subscription.status,
-        currentPeriodStart: subscription.currentPeriodStart,
-        currentPeriodEnd: subscription.currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd
+        subscriptionId: stripeSubscription.id,
+        profileId: profileId,
+        organizationId: organizationId,
+        planType: planType,
+        planName: planName,
+        planPrice: planPrice,
+        planCurrency: planCurrency,
+        status: stripeSubscription.status,
+        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+        customerEmail: stripeSubscription.customer?.email || ''
       };
     } catch (error) {
       logger.error('Error al obtener suscripción:', error);
@@ -254,110 +234,169 @@ class SubscriptionService {
   
   async getProfileSubscriptions(profileId) {
     try {
-      // Obtener todas las suscripciones del perfil
-      const subscriptions = await Subscription.findAll({
-        where: { profileId },
-        order: [['createdAt', 'DESC']]
+      // Obtener el perfil para encontrar el Stripe Customer ID
+      const profile = await Profile.findByPk(profileId);
+      
+      if (!profile || !profile.stripeCustomerId) {
+        return []; // Si no tiene Stripe Customer ID, no tiene suscripciones
+      }
+      
+      // Obtener todas las suscripciones del perfil directamente desde Stripe
+      const stripeSubscriptions = await stripe.subscriptions.list({
+        customer: profile.stripeCustomerId,
+        limit: 100,
+        expand: ['data.customer', 'data.plan.product']
       });
       
-      // Transformar a formato de respuesta
-      return subscriptions.map(subscription => this.formatSubscriptionResponse(subscription));
+      // Transformar las suscripciones de Stripe al formato esperado
+      return stripeSubscriptions.data.map(stripeSub => {
+        // Determinar el tipo de plan basado en el precio
+        let planType = 'desconocido';
+        let planName = 'Plan Desconocido';
+        let planPrice = 0;
+        let planCurrency = 'eur';
+        
+        if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
+          const item = stripeSub.items.data[0];
+          
+          // Intentar obtener el ID del precio
+          if (item.price && item.price.id) {
+            planType = item.price.id;
+          }
+          
+          // Intentar determinar plan por precio
+          if (item.price && item.price.unit_amount) {
+            if (item.price.unit_amount === 999) {
+              planType = 'plan_basic';
+              planName = 'Plan Básico';
+              planPrice = 9.99;
+            } else if (item.price.unit_amount === 2999) {
+              planType = 'plan_premium';
+              planName = 'Plan Premium';
+              planPrice = 29.99;
+            } else {
+              planPrice = item.price.unit_amount / 100;
+            }
+          }
+          
+          // Intentar obtener nombre del producto
+          if (item.price && item.price.product && typeof item.price.product === 'object') {
+            planName = item.price.product.name || planName;
+          }
+          
+          // Intentar obtener moneda
+          if (item.price && item.price.currency) {
+            planCurrency = item.price.currency;
+          }
+        }
+        
+        return {
+          subscriptionId: stripeSub.id,
+          profileId: profileId,
+          organizationId: profile.organizationId,
+          planType: planType,
+          planName: planName,
+          planPrice: planPrice,
+          planCurrency: planCurrency,
+          status: stripeSub.status,
+          currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+          currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+          cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+          createdAt: new Date(stripeSub.created * 1000)
+        };
+      });
     } catch (error) {
       logger.error('Error al obtener suscripciones del perfil:', error);
-      throw error;
+      return []; // Devolver array vacío para evitar error 500 en la API
     }
   }
   
-  async getAllSubscriptions(filters = {}) {
+  async getAllSubscriptions() {
     try {
-      // Verificar si debemos usar Stripe directamente
-      if (process.env.USE_STRIPE_MOCK === 'true' || process.env.NODE_ENV === 'development') {
+      // Obtener todas las suscripciones directamente desde Stripe
+      try {
+        // Comprobar que Stripe Mock está activo
+        let stripeStatus;
         try {
-          // Obtener suscripciones desde Stripe
-          logger.info('Obteniendo suscripciones directamente desde Stripe');
+          // Hacemos una petición simple para comprobar que el servicio está activo
+          stripeStatus = await stripe.balance.retrieve();
+          logger.info('Conexión con Stripe Mock verificada.');
+        } catch (stripeConnectionError) {
+          logger.error('No se pudo establecer conexión con Stripe Mock:', stripeConnectionError.message);
+          throw new Error('No se pudo establecer conexión con Stripe Mock');
+        }
+        
+        const stripeSubscriptions = await stripe.subscriptions.list({
+          limit: 100,
+          expand: ['data.customer', 'data.plan.product']
+        });
+        
+        // Transformar las suscripciones de Stripe al formato esperado
+        return stripeSubscriptions.data.map(stripeSub => {
+          // Determinar el tipo de plan basado en el precio
+          let planType = 'desconocido';
+          let planName = 'Plan Desconocido';
+          let planPrice = 0;
+          let planCurrency = 'eur';
           
-          // Comprobar que Stripe Mock está activo
-          let stripeStatus;
-          try {
-            // Hacemos una petición simple para comprobar que el servicio está activo
-            stripeStatus = await stripe.balance.retrieve();
-            logger.info('Conexión con Stripe Mock verificada.');
-          } catch (stripeConnectionError) {
-            logger.error('No se pudo establecer conexión con Stripe Mock:', stripeConnectionError.message);
-            throw new Error('No se pudo establecer conexión con Stripe Mock');
-          }
-          
-          const stripeSubscriptions = await stripe.subscriptions.list({
-            limit: 100,
-            expand: ['data.customer', 'data.plan.product']
-          });
-          
-          // Transformar las suscripciones de Stripe al formato esperado
-          return stripeSubscriptions.data.map(stripeSub => {
-            // Buscar datos adicionales en la base de datos
-            // Determinar el tipo de plan basado en el precio
-            let planType = 'desconocido';
-            if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
-              // Tratamos de determinar qué plan es basado en el precio
-              const priceAmount = stripeSub.items.data[0].price.unit_amount;
-              if (priceAmount === 999) {
+          if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
+            const item = stripeSub.items.data[0];
+            
+            // Intentar obtener el ID del precio
+            if (item.price && item.price.id) {
+              planType = item.price.id;
+            }
+            
+            // Intentar determinar plan por precio
+            if (item.price && item.price.unit_amount) {
+              if (item.price.unit_amount === 999) {
                 planType = 'plan_basic';
-              } else if (priceAmount === 2999) {
+                planName = 'Plan Básico';
+                planPrice = 9.99;
+              } else if (item.price.unit_amount === 2999) {
                 planType = 'plan_premium';
+                planName = 'Plan Premium';
+                planPrice = 29.99;
               } else {
-                // Usamos el ID como fallback
-                planType = stripeSub.items.data[0].price.id;
+                planPrice = item.price.unit_amount / 100;
               }
             }
             
-            const subscription = {
-              id: stripeSub.id,
-              stripeSubscriptionId: stripeSub.id,
-              planType: planType,
-              status: stripeSub.status,
-              currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-              currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
-              cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-              createdAt: new Date(stripeSub.created * 1000),
-              updatedAt: new Date(),
-              // Datos del cliente
-              profileId: stripeSub.metadata?.profileId || 'desconocido',
-              organizationId: stripeSub.metadata?.organizationId || 'desconocido',
-              // Datos adicionales
-              planName: stripeSub.items?.data[0]?.price?.product?.name || 
-                        (planType === 'plan_basic' ? 'Nkripta Básico' : 
-                         planType === 'plan_premium' ? 'Nkripta Premium' : 'Plan Desconocido'),
-              planPrice: stripeSub.items?.data[0]?.price?.unit_amount / 100 || 
-                         (planType === 'plan_basic' ? 9.99 : 
-                          planType === 'plan_premium' ? 29.99 : 0),
-              planCurrency: stripeSub.items?.data[0]?.price?.currency || 'eur',
-              customerEmail: stripeSub.customer?.email || 'desconocido'
-            };
+            // Intentar obtener nombre del producto
+            if (item.price && item.price.product && typeof item.price.product === 'object') {
+              planName = item.price.product.name || planName;
+            }
             
-            return subscription;
-          });
-        } catch (stripeError) {
-          // Si hay error con Stripe, logearlo y usar fallback a base de datos
-          logger.error('Error al conectar con Stripe, usando base de datos local como fallback:', stripeError);
+            // Intentar obtener moneda
+            if (item.price && item.price.currency) {
+              planCurrency = item.price.currency;
+            }
+          }
           
-          // Caer al comportamiento por defecto - usar la base de datos
-          const subscriptions = await Subscription.findAll({
-            where: filters,
-            order: [['createdAt', 'DESC']]
-          });
+          // Extraer metadata
+          const profileId = stripeSub.metadata?.profileId || '';
+          const organizationId = stripeSub.metadata?.organizationId || '';
           
-          // Transformar a formato de respuesta
-          return subscriptions.map(subscription => this.formatSubscriptionResponse(subscription));
-        }
-      } else {
-        // Comportamiento original - obtener desde la base de datos
-        const subscriptions = await Subscription.findAll({
-          where: filters,
-          order: [['createdAt', 'DESC']]
+          return {
+            subscriptionId: stripeSub.id,
+            profileId: profileId,
+            organizationId: organizationId,
+            planType: planType,
+            planName: planName,
+            planPrice: planPrice,
+            planCurrency: planCurrency,
+            status: stripeSub.status,
+            currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            createdAt: new Date(stripeSub.created * 1000),
+            customerEmail: stripeSub.customer?.email || ''
+          };
         });
-        
-        // Transformar a formato de respuesta
-        return subscriptions.map(subscription => this.formatSubscriptionResponse(subscription));
+      } catch (stripeError) {
+        // Si hay error con Stripe, logearlo y devolver array vacío
+        logger.error('Error al conectar con Stripe:', stripeError);
+        return [];
       }
     } catch (error) {
       logger.error('Error al obtener todas las suscripciones:', error);
@@ -366,46 +405,49 @@ class SubscriptionService {
     }
   }
   
-  // Método utilitario para formatear respuestas de suscripción
-  formatSubscriptionResponse(subscription) {
-    return {
-      id: subscription.id,
-      stripeSubscriptionId: subscription.stripeSubscriptionId,
-      profileId: subscription.profileId,
-      organizationId: subscription.organizationId,
-      planType: subscription.planType,
-      status: subscription.status,
-      currentPeriodStart: subscription.currentPeriodStart,
-      currentPeriodEnd: subscription.currentPeriodEnd,
-      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-      createdAt: subscription.createdAt
-    };
-  }
-  
   async canManageSubscription(subscriptionId, profileId, organizationId, roles = []) {
     try {
-      // Primero intentamos buscar por Stripe ID
-      let subscription = await Subscription.findOne({
-        where: { stripeSubscriptionId: subscriptionId }
-      });
-      
-      // Si no se encuentra, intentamos buscar por ID interno
-      if (!subscription) {
-        subscription = await Subscription.findByPk(subscriptionId);
+      // Obtener la suscripción directamente desde Stripe
+      let stripeSubscription;
+      try {
+        stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      } catch (stripeError) {
+        logger.error('Error al obtener suscripción de Stripe para verificar permisos:', stripeError.message);
+        return false;
       }
       
-      if (!subscription) {
-        return false; // Si no existe, no se puede gestionar
-      }
+      // Obtener metadata
+      const subProfileId = stripeSubscription.metadata?.profileId || '';
+      const subOrgId = stripeSubscription.metadata?.organizationId || '';
       
       // Si es el propietario de la suscripción
-      if (subscription.profileId === profileId) {
+      if (subProfileId === profileId) {
         return true;
       }
       
       // Si es administrador y pertenece a la misma organización
-      if (roles.includes('ADMIN') && subscription.organizationId === organizationId) {
+      if (roles.includes('ADMIN') && subOrgId === organizationId) {
         return true;
+      }
+      
+      // Si los metadatos no están disponibles, intentamos verificar por customer
+      if ((!subProfileId || !subOrgId) && stripeSubscription.customer) {
+        // Buscar el perfil con ese customer ID
+        const profile = await Profile.findOne({
+          where: { stripeCustomerId: stripeSubscription.customer }
+        });
+        
+        if (profile) {
+          // Si es el propietario
+          if (profile.id === profileId) {
+            return true;
+          }
+          
+          // Si es admin de la misma organización
+          if (roles.includes('ADMIN') && profile.organizationId === organizationId) {
+            return true;
+          }
+        }
       }
       
       return false;
@@ -416,124 +458,10 @@ class SubscriptionService {
   }
 
   async handleWebhook(event) {
-    try {
-      switch (event.type) {
-        case 'invoice.payment_succeeded':
-          await this.handlePaymentSucceeded(event.data.object);
-          break;
-        
-        case 'invoice.payment_failed':
-          await this.handlePaymentFailed(event.data.object);
-          break;
-        
-        case 'customer.subscription.updated':
-          await this.handleSubscriptionUpdated(event.data.object);
-          break;
-        
-        case 'customer.subscription.deleted':
-          await this.handleSubscriptionDeleted(event.data.object);
-          break;
-      }
-      
-      return { received: true };
-    } catch (error) {
-      logger.error('Error al procesar webhook de Stripe:', error);
-      throw error;
-    }
-  }
-
-  async handlePaymentSucceeded(invoice) {
-    if (invoice.subscription) {
-      const subscription = await Subscription.findOne({
-        where: { stripeSubscriptionId: invoice.subscription }
-      });
-      
-      if (subscription) {
-        const stripeSubscription = await stripe.subscriptions.retrieve(invoice.subscription);
-        
-        subscription.status = stripeSubscription.status;
-        
-        // Procesar fecha con manejo de errores
-        try {
-          if (stripeSubscription.current_period_end) {
-            const periodEndDate = new Date(stripeSubscription.current_period_end * 1000);
-            
-            // Verificar si la fecha es válida
-            if (!isNaN(periodEndDate.getTime())) {
-              subscription.currentPeriodEnd = periodEndDate;
-            }
-          }
-        } catch (error) {
-          logger.error('Error al procesar fecha de fin de periodo:', error);
-        }
-        
-        subscription.updatedAt = new Date();
-        await subscription.save();
-      }
-    }
-  }
-
-  async handlePaymentFailed(invoice) {
-    if (invoice.subscription) {
-      const subscription = await Subscription.findOne({
-        where: { stripeSubscriptionId: invoice.subscription }
-      });
-      
-      if (subscription) {
-        const stripeSubscription = await stripe.subscriptions.retrieve(invoice.subscription);
-        
-        subscription.status = stripeSubscription.status;
-        subscription.updatedAt = new Date();
-        await subscription.save();
-      }
-    }
-  }
-
-  async handleSubscriptionUpdated(subscription) {
-    const dbSubscription = await Subscription.findOne({
-      where: { stripeSubscriptionId: subscription.id }
-    });
-    
-    if (dbSubscription) {
-      dbSubscription.status = subscription.status;
-      
-      // Procesar fechas con manejo de errores
-      try {
-        // Periodo de inicio
-        if (subscription.current_period_start) {
-          const periodStartDate = new Date(subscription.current_period_start * 1000);
-          if (!isNaN(periodStartDate.getTime())) {
-            dbSubscription.currentPeriodStart = periodStartDate;
-          }
-        }
-        
-        // Periodo de fin
-        if (subscription.current_period_end) {
-          const periodEndDate = new Date(subscription.current_period_end * 1000);
-          if (!isNaN(periodEndDate.getTime())) {
-            dbSubscription.currentPeriodEnd = periodEndDate;
-          }
-        }
-      } catch (error) {
-        logger.error('Error al procesar fechas de suscripción en actualización:', error);
-      }
-      
-      dbSubscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
-      dbSubscription.updatedAt = new Date();
-      await dbSubscription.save();
-    }
-  }
-
-  async handleSubscriptionDeleted(subscription) {
-    const dbSubscription = await Subscription.findOne({
-      where: { stripeSubscriptionId: subscription.id }
-    });
-    
-    if (dbSubscription) {
-      dbSubscription.status = 'canceled';
-      dbSubscription.updatedAt = new Date();
-      await dbSubscription.save();
-    }
+    // Stripe webhooks ahora se manejan directamente por Stripe
+    // No necesitamos sincronizar con una base de datos local
+    logger.info(`Evento Stripe recibido: ${event.type}`);
+    return { received: true };
   }
 }
 
