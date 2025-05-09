@@ -154,12 +154,22 @@ const getAllSubscriptions = async (req, res, next) => {
       filters.organizationId = req.user.organizationId;
     }
     
-    const subscriptions = await subscriptionService.getAllSubscriptions(filters);
-    
-    return res.json({
-      count: subscriptions.length,
-      items: subscriptions
-    });
+    try {
+      const subscriptions = await subscriptionService.getAllSubscriptions(filters);
+      
+      return res.json({
+        count: subscriptions.length,
+        items: subscriptions
+      });
+    } catch (error) {
+      logger.error('Error al obtener suscripciones en el controlador:', error);
+      // Devolver un array vacío en caso de error
+      return res.json({
+        count: 0,
+        items: [],
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Error al obtener suscripciones'
+      });
+    }
   } catch (error) {
     logger.error('Error al obtener lista de suscripciones:', error);
     next(error);

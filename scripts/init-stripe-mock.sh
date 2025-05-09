@@ -68,9 +68,19 @@ else
 fi
 
 if grep -q "STRIPE_MOCK_HOST" .env; then
-  sed -i.bak 's/STRIPE_MOCK_HOST=.*/STRIPE_MOCK_HOST=localhost/' .env
+  if [ -n "$DOCKER_HOST" ]; then
+    # Si estamos ejecutando dentro de Docker, usar stripe-mock
+    sed -i.bak 's/STRIPE_MOCK_HOST=.*/STRIPE_MOCK_HOST=stripe-mock/' .env
+  else 
+    # Si estamos ejecutando en local, usar localhost
+    sed -i.bak 's/STRIPE_MOCK_HOST=.*/STRIPE_MOCK_HOST=localhost/' .env
+  fi
 else
-  echo "STRIPE_MOCK_HOST=localhost" >> .env
+  if [ -n "$DOCKER_HOST" ]; then
+    echo "STRIPE_MOCK_HOST=stripe-mock" >> .env
+  else
+    echo "STRIPE_MOCK_HOST=localhost" >> .env
+  fi
 fi
 
 if grep -q "STRIPE_MOCK_PORT" .env; then
