@@ -15,7 +15,33 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+
+// Middleware para capturar el cuerpo raw para webhooks de Stripe
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/billing/webhook') {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => {
+      data += chunk;
+    });
+    req.on('end', () => {
+      req.rawBody = data;
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
+// Configurar JSON para procesamiento normal
+app.use(express.json({ 
+  verify: (req, res, buf) => {
+    if (req.originalUrl === '/api/billing/webhook') {
+      req.rawBody = buf.toString();
+    }
+  }
+}));
+
 app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
 
 // Rutas

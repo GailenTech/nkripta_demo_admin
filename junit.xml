@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="22" failures="0" errors="0" time="0.616">
+  <testsuite name="Pruebas de integración" errors="0" failures="0" skipped="0" timestamp="2025-05-08T23:23:40" time="0.232" tests="1">
+    <testcase classname="Pruebas de integración Ciclo completo: Organización -&gt; Usuario -&gt; Suscripción" name="Pruebas de integración Ciclo completo: Organización -&gt; Usuario -&gt; Suscripción" time="0.115">
+    </testcase>
+  </testsuite>
+  <testsuite name="Módulo de Perfiles" errors="0" failures="0" skipped="0" timestamp="2025-05-08T23:23:41" time="0.11" tests="6">
+    <testcase classname="Módulo de Perfiles Crear nuevo perfil de usuario" name="Módulo de Perfiles Crear nuevo perfil de usuario" time="0.053">
+    </testcase>
+    <testcase classname="Módulo de Perfiles Obtener perfil por ID" name="Módulo de Perfiles Obtener perfil por ID" time="0.007">
+    </testcase>
+    <testcase classname="Módulo de Perfiles Actualizar perfil" name="Módulo de Perfiles Actualizar perfil" time="0.005">
+    </testcase>
+    <testcase classname="Módulo de Perfiles Perfil pertenece a la organización correcta" name="Módulo de Perfiles Perfil pertenece a la organización correcta" time="0.004">
+    </testcase>
+    <testcase classname="Módulo de Perfiles Acceso a perfil propio permitido" name="Módulo de Perfiles Acceso a perfil propio permitido" time="0.003">
+    </testcase>
+    <testcase classname="Módulo de Perfiles No se puede crear perfil con email duplicado" name="Módulo de Perfiles No se puede crear perfil con email duplicado" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="Módulo de Suscripciones" errors="0" failures="0" skipped="0" timestamp="2025-05-08T23:23:41" time="0.086" tests="5">
+    <testcase classname="Módulo de Suscripciones Obtener suscripciones del perfil" name="Módulo de Suscripciones Obtener suscripciones del perfil" time="0.01">
+    </testcase>
+    <testcase classname="Módulo de Suscripciones Crear nueva suscripción" name="Módulo de Suscripciones Crear nueva suscripción" time="0.051">
+    </testcase>
+    <testcase classname="Módulo de Suscripciones Obtener suscripción por ID" name="Módulo de Suscripciones Obtener suscripción por ID" time="0">
+    </testcase>
+    <testcase classname="Módulo de Suscripciones Cancelar suscripción" name="Módulo de Suscripciones Cancelar suscripción" time="0">
+    </testcase>
+    <testcase classname="Módulo de Suscripciones No se pueden crear múltiples suscripciones del mismo tipo" name="Módulo de Suscripciones No se pueden crear múltiples suscripciones del mismo tipo" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="Módulo de Organizaciones" errors="0" failures="0" skipped="0" timestamp="2025-05-08T23:23:41" time="0.092" tests="5">
+    <testcase classname="Módulo de Organizaciones Obtener organización existente" name="Módulo de Organizaciones Obtener organización existente" time="0.005">
+    </testcase>
+    <testcase classname="Módulo de Organizaciones Obtener miembros de la organización" name="Módulo de Organizaciones Obtener miembros de la organización" time="0.005">
+    </testcase>
+    <testcase classname="Módulo de Organizaciones Crear nueva organización" name="Módulo de Organizaciones Crear nueva organización" time="0.045">
+    </testcase>
+    <testcase classname="Módulo de Organizaciones Actualizar organización existente" name="Módulo de Organizaciones Actualizar organización existente" time="0.007">
+    </testcase>
+    <testcase classname="Módulo de Organizaciones Verificar manejo de acceso a organización inexistente" name="Módulo de Organizaciones Verificar manejo de acceso a organización inexistente" time="0.004">
+    </testcase>
+  </testsuite>
+  <testsuite name="Módulo de Autenticación" errors="0" failures="0" skipped="0" timestamp="2025-05-08T23:23:41" time="0.079" tests="5">
+    <testcase classname="Módulo de Autenticación Acceso con token válido" name="Módulo de Autenticación Acceso con token válido" time="0.006">
+    </testcase>
+    <testcase classname="Módulo de Autenticación Obtener perfil con token válido" name="Módulo de Autenticación Obtener perfil con token válido" time="0.003">
+    </testcase>
+    <testcase classname="Módulo de Autenticación Acceso denegado sin token" name="Módulo de Autenticación Acceso denegado sin token" time="0.039">
+    </testcase>
+    <testcase classname="Módulo de Autenticación Acceso denegado con token inválido" name="Módulo de Autenticación Acceso denegado con token inválido" time="0.001">
+    </testcase>
+    <testcase classname="Módulo de Autenticación Intentar login" name="Módulo de Autenticación Intentar login" time="0.009">
+    </testcase>
+  </testsuite>
+</testsuites>

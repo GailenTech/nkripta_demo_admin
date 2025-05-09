@@ -31,7 +31,7 @@ const testFiles = [
 ];
 
 // Función para ejecutar un test individual
-function runTest(testFile) {
+function runTest(testFile, generateReports = false) {
   return new Promise((resolve, reject) => {
     console.log(`${colors.bright}${colors.blue}===================================${colors.reset}`);
     console.log(`${colors.bright}${colors.blue}Ejecutando: ${testFile}${colors.reset}`);
@@ -46,8 +46,32 @@ function runTest(testFile) {
       return;
     }
     
+    // Preparar argumentos para Jest
+    const jestArgs = ['jest', testPath, '--verbose'];
+    
+    // Agregar argumentos para reportes si se solicitan
+    if (generateReports) {
+      // Asegurar que exista el directorio de reportes
+      const reportDir = path.join(process.cwd(), 'test-reports');
+      if (!fs.existsSync(reportDir)) {
+        fs.mkdirSync(reportDir, { recursive: true });
+      }
+      
+      // Si estamos en modo CI, agregar flag --ci
+      if (process.env.CI === 'true') {
+        jestArgs.push('--ci');
+      }
+    }
+    
     // Ejecutar jest para el archivo específico
-    const jest = spawn('npx', ['jest', testPath, '--verbose']);
+    const jest = spawn('npx', jestArgs, {
+      env: {
+        ...process.env,
+        // Asegurar que se utilice stripe-mock para las pruebas
+        STRIPE_MOCK_ENABLED: process.env.STRIPE_MOCK_ENABLED || 'true',
+        TEST_MODE: process.env.TEST_MODE || 'full'
+      }
+    });
     
     jest.stdout.on('data', (data) => {
       process.stdout.write(data.toString());
@@ -72,14 +96,27 @@ function runTest(testFile) {
 
 // Función principal
 async function runTests() {
+  // Verificar si se solicitan reportes
+  const generateReports = process.argv.includes('--reports') || process.env.GENERATE_REPORTS === 'true';
+  
   console.log(`${colors.bright}${colors.green}Iniciando ejecución secuencial de pruebas${colors.reset}`);
   console.log(`${colors.yellow}API URL: ${process.env.API_URL || 'http://localhost:3000/api'}${colors.reset}`);
+  console.log(`${colors.yellow}Generando reportes: ${generateReports ? 'Sí' : 'No'}${colors.reset}`);
+  
+  // Si se van a generar reportes, asegurar que exista el directorio
+  if (generateReports) {
+    const reportDir = path.join(process.cwd(), 'test-reports');
+    if (!fs.existsSync(reportDir)) {
+      fs.mkdirSync(reportDir, { recursive: true });
+      console.log(`${colors.blue}Creado directorio de reportes: ${reportDir}${colors.reset}`);
+    }
+  }
   
   let failedTests = 0;
   
   for (const testFile of testFiles) {
     try {
-      await runTest(testFile);
+      await runTest(testFile, generateReports);
     } catch (error) {
       console.error(`${colors.red}Error al ejecutar ${testFile}: ${error.message}${colors.reset}`);
       failedTests++;
@@ -96,6 +133,11 @@ async function runTests() {
     process.exit(1);
   } else {
     console.log(`${colors.green}Todas las pruebas se ejecutaron correctamente${colors.reset}`);
+    
+    if (generateReports) {
+      console.log(`${colors.green}Reportes generados en el directorio test-reports/${colors.reset}`);
+    }
+    
     process.exit(0);
   }
 }

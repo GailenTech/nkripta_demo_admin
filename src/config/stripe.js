@@ -6,10 +6,10 @@ const stripeConfig = {
   apiVersion: '2022-11-15' // Ajustar según versión compatible con stripe-mock
 };
 
-// Si estamos en desarrollo, usa el host de stripe-mock
-if (process.env.NODE_ENV === 'development') {
-  stripeConfig.host = 'stripe-mock';
-  stripeConfig.port = '12111';
+// Si estamos en desarrollo o se especifica usar stripe-mock, usar el host/puerto configurado
+if (process.env.NODE_ENV === 'development' || process.env.STRIPE_MOCK_ENABLED === 'true') {
+  stripeConfig.host = process.env.STRIPE_MOCK_HOST || 'stripe-mock';
+  stripeConfig.port = process.env.STRIPE_MOCK_PORT || '12111';
   stripeConfig.protocol = 'http';
 }
 

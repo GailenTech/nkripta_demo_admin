@@ -34,5 +34,24 @@ module.exports = {
   testEnvironment: 'node',
   
   // Número máximo de trabajadores 
-  maxWorkers: '50%'
+  maxWorkers: '50%',
+  
+  // Configuración de reportes para CI/CD
+  reporters: [
+    'default',
+    ['jest-junit', {
+      outputDirectory: '<rootDir>/test-reports',
+      outputName: 'junit.xml',
+      classNameTemplate: '{classname}',
+      titleTemplate: '{title}',
+      ancestorSeparator: ' › '
+    }],
+    ['jest-html-reporter', {
+      pageTitle: 'NKripta Admin Test Report',
+      outputPath: '<rootDir>/test-reports/test-report.html',
+      includeFailureMsg: true,
+      includeSuiteFailure: true,
+      sort: 'status'
+    }]
+  ]
 };

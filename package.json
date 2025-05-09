@@ -15,7 +15,14 @@
     "test:integration": "jest tests/integration.test.js",
     "setup:test": "node scripts/setup-test-environment.js",
     "test:with-setup": "npm run setup:test && npm test",
-    "test:skip-external": "node scripts/create-test-env.js && npm test"
+    "test:skip-external": "node scripts/create-test-env.js && npm test",
+    "test:with-stripe-mock": "STRIPE_MOCK_ENABLED=true TEST_MODE=full jest",
+    "test:ci": "STRIPE_MOCK_ENABLED=true TEST_MODE=full jest --ci --reporters=jest-junit",
+    "test:html-report": "STRIPE_MOCK_ENABLED=true TEST_MODE=full jest --reporters=jest-html-reporter",
+    "test:all-reports": "mkdir -p test-reports && STRIPE_MOCK_ENABLED=true TEST_MODE=full jest --ci",
+    "test:sequential-with-reports": "GENERATE_REPORTS=true node tests/run-tests.js --reports",
+    "test:docs": "node scripts/generate-test-docs.js",
+    "test:full-ci": "npm run test:all-reports && npm run test:docs"
   },
   "dependencies": {
     "aws-sdk": "^2.1358.0",
@@ -38,6 +45,8 @@
   "devDependencies": {
     "axios": "^1.9.0",
     "jest": "^29.5.0",
+    "jest-html-reporter": "^4.1.0",
+    "jest-junit": "^16.0.0",
     "nodemon": "^2.0.22",
     "supertest": "^6.3.3"
   }
