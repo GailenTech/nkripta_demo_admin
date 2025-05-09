@@ -34,3 +34,6 @@ coverage/
 
 # Archivos de respaldo
 *.bak
+
+# Interfaz de administración
+nkripta-admin-ui/
