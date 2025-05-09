@@ -93,6 +93,63 @@ Para el entorno de desarrollo local:
 - **Cognito**: Emulado por cognito-local (cualquier email/contraseña válida funcionará)
 - **Stripe**: Utiliza [números de tarjeta de prueba](https://stripe.com/docs/testing)
 
+## Datos de demostración
+
+El proyecto incluye scripts para generar datos de demostración realistas para el entorno de desarrollo:
+
+### Inicializar base de datos de demostración
+
+Para configurar una base de datos con datos de demostración completos, ejecuta:
+
+```bash
+# Inicializar la base de datos con datos de demostración
+./scripts/init-demo-db.sh
+```
+
+Este script:
+1. Verifica que los servicios Docker estén en ejecución
+2. Crea la base de datos si no existe
+3. Configura las variables de entorno necesarias
+4. Genera datos de demostración realistas
+
+### Datos de demostración incluidos
+
+Los datos de demostración incluyen:
+
+**Organizaciones**:
+- TechSolutions Inc. - Empresa de tecnología
+- InnovaDesign - Estudio de diseño
+- Global Health Services - Servicios de salud
+
+**Usuarios**:
+- Cada organización tiene 3-4 usuarios
+- Al menos un usuario administrador por organización
+- Cada usuario tiene un perfil completo con datos de contacto
+
+**Planes de suscripción**:
+- Plan Básico (9.99€/mes)
+- Plan Premium (29.99€/mes)
+
+**Credenciales de ejemplo**:
+- carlos.martinez@techsolutions-demo.com (Admin - TechSolutions)
+- miguel.fernandez@innovadesign-demo.com (Admin - InnovaDesign)
+- isabel.torres@globalhealth-demo.com (Admin - Global Health Services)
+
+**Tarjetas de prueba de Stripe**:
+- Tarjetas específicas para probar diferentes escenarios de pago
+- Ver [STRIPE_TEST_CARDS.md](STRIPE_TEST_CARDS.md) para detalles completos
+
+Para información más detallada, consulte [DEMO_DATA.md](DEMO_DATA.md).
+
+### Generar solo datos de demostración
+
+Si solo deseas regenerar los datos de demostración sin reiniciar toda la base de datos:
+
+```bash
+# Generar datos de demostración
+docker compose exec app node scripts/generate-demo-data.js
+```
+
 ## Ejecución de pruebas
 
 Para información detallada sobre la ejecución de pruebas, consulte [TESTING.md](TESTING.md).
