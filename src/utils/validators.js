@@ -28,10 +28,21 @@ const organizationValidationRules = [
   body('phone').optional().isLength({ max: 15 }).withMessage('Teléfono demasiado largo')
 ];
 
+// Reglas para actualizar un perfil
 const profileValidationRules = [
   body('firstName').optional().notEmpty().withMessage('El nombre no puede estar vacío'),
   body('lastName').optional().notEmpty().withMessage('El apellido no puede estar vacío'),
-  body('email').optional().isEmail().withMessage('Email inválido')
+  body('email').optional().isEmail().withMessage('Email inválido'),
+  body('organizationId').optional().isUUID().withMessage('ID de organización inválido')
+];
+
+// Reglas para crear un nuevo perfil (más estrictas)
+const createProfileValidationRules = [
+  body('email').isEmail().withMessage('Email inválido'),
+  body('firstName').notEmpty().withMessage('El nombre es requerido'),
+  body('lastName').notEmpty().withMessage('El apellido es requerido'),
+  body('organizationId').isUUID().withMessage('ID de organización inválido'),
+  body('roles').optional().isArray().withMessage('Roles debe ser un array')
 ];
 
 const subscriptionValidationRules = [
@@ -45,5 +56,6 @@ module.exports = {
   loginValidationRules,
   organizationValidationRules,
   profileValidationRules,
+  createProfileValidationRules,
   subscriptionValidationRules
 };

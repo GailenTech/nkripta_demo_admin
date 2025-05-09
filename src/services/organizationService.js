@@ -120,7 +120,7 @@ class OrganizationService {
       });
       
       return {
-        members: result.rows,
+        items: result.rows, // Changed from 'members' to 'items' to match frontend expectations
         total: result.count,
         page,
         limit,

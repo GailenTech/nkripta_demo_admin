@@ -15,7 +15,7 @@ const colors = {
 };
 
 // Configuración base
-const API_URL = 'http://app:3000/api'; // Usando hostname del servicio en docker-compose
+const API_URL = process.env.API_URL || 'http://localhost:3000/api'; // Usar variable de entorno o localhost por defecto
 let token = '';
 
 // Función para imprimir respuestas
