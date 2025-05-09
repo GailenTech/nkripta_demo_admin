@@ -16,7 +16,15 @@ const Profile = require('../src/models/profile');
 const Subscription = require('../src/models/subscription');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
-const chalk = require('chalk');
+
+// Reemplazar chalk con funciones simples de console.log para compatibilidad
+const log = {
+  blue: (text) => console.log('\x1b[34m%s\x1b[0m', text),
+  green: (text) => console.log('\x1b[32m%s\x1b[0m', text),
+  yellow: (text) => console.log('\x1b[33m%s\x1b[0m', text),
+  red: (text) => console.log('\x1b[31m%s\x1b[0m', text),
+  cyan: (text) => console.log('\x1b[36m%s\x1b[0m', text)
+};
 
 // Configuración
 const PLANS = {
@@ -189,21 +197,21 @@ function generateFakeStripeCustomerId() {
 // Función principal para generar datos
 async function generateDemoData() {
   try {
-    console.log(chalk.blue('🚀 Iniciando generación de datos de demostración para Nkripta'));
+    log.blue('🚀 Iniciando generación de datos de demostración para Nkripta');
     
     // Comprobar conexión a la base de datos
     await sequelize.authenticate();
-    console.log(chalk.green('✅ Conexión a la base de datos establecida'));
+    log.green('✅ Conexión a la base de datos establecida');
     
     // Limpiar datos existentes
-    console.log(chalk.yellow('🧹 Limpiando datos existentes...'));
+    log.yellow('🧹 Limpiando datos existentes...');
     await Subscription.destroy({ where: {} });
     await Profile.destroy({ where: {} });
     await Organization.destroy({ where: {} });
     
     // Crear organizaciones
     const organizations = [];
-    console.log(chalk.blue('\n📊 Creando organizaciones...'));
+    log.blue('\n📊 Creando organizaciones...');
     
     for (const orgData of DEMO_ORGANIZATIONS) {
       const organization = await Organization.create({
@@ -212,17 +220,17 @@ async function generateDemoData() {
       });
       
       organizations.push(organization);
-      console.log(chalk.green(`✅ Organización creada: ${organization.name} (${organization.id})`));
+      log.green(`✅ Organización creada: ${organization.name} (${organization.id})`);
     }
     
     // Crear perfiles y suscripciones
-    console.log(chalk.blue('\n👥 Creando perfiles y suscripciones...'));
+    log.blue('\n👥 Creando perfiles y suscripciones...');
     
     for (let i = 0; i < organizations.length; i++) {
       const organization = organizations[i];
       const usersData = DEMO_USERS[i];
       
-      console.log(chalk.yellow(`\n🏢 Organización: ${organization.name}`));
+      log.yellow(`\n🏢 Organización: ${organization.name}`);
       
       for (const userData of usersData) {
         // Crear perfil
@@ -236,7 +244,7 @@ async function generateDemoData() {
           sub: uuidv4()
         });
         
-        console.log(chalk.green(`  ✅ Perfil creado: ${profile.firstName} ${profile.lastName} (${profile.email})`));
+        log.green(`  ✅ Perfil creado: ${profile.firstName} ${profile.lastName} (${profile.email})`);
         
         // Crear suscripción
         const now = new Date();
@@ -257,7 +265,7 @@ async function generateDemoData() {
           updatedAt: now
         });
         
-        console.log(chalk.cyan(`    💰 Suscripción creada: ${userData.plan.name} (${userData.plan.price}€)`));
+        log.cyan(`    💰 Suscripción creada: ${userData.plan.name} (${userData.plan.price}€)`);
       }
     }
     
@@ -266,25 +274,25 @@ async function generateDemoData() {
     const profileCount = await Profile.count();
     const subscriptionCount = await Subscription.count();
     
-    console.log(chalk.blue('\n📈 Estadísticas de datos generados:'));
-    console.log(chalk.yellow(`  🏢 Organizaciones: ${organizationCount}`));
-    console.log(chalk.yellow(`  👥 Perfiles: ${profileCount}`));
-    console.log(chalk.yellow(`  💰 Suscripciones: ${subscriptionCount}`));
+    log.blue('\n📈 Estadísticas de datos generados:');
+    log.yellow(`  🏢 Organizaciones: ${organizationCount}`);
+    log.yellow(`  👥 Perfiles: ${profileCount}`);
+    log.yellow(`  💰 Suscripciones: ${subscriptionCount}`);
     
-    console.log(chalk.green('\n✅ Datos de demostración generados correctamente'));
+    log.green('\n✅ Datos de demostración generados correctamente');
     
     // Cerrar conexión
     await sequelize.close();
     
   } catch (error) {
-    console.error(chalk.red('❌ Error al generar datos de demostración:'));
+    console.error('\x1b[31m%s\x1b[0m', '❌ Error al generar datos de demostración:');
     console.error(error);
     
     // Cerrar conexión en caso de error
     try {
       await sequelize.close();
     } catch (closeError) {
-      console.error(chalk.red('Error adicional al cerrar la conexión:'), closeError);
+      console.error('\x1b[31m%s\x1b[0m', 'Error adicional al cerrar la conexión:', closeError);
     }
     
     process.exit(1);

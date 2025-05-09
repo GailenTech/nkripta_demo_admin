@@ -9,7 +9,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const chalk = require('chalk');
+
+// Reemplazar chalk con funciones simples de console.log para compatibilidad
+const log = {
+  blue: (text) => console.log('\x1b[34m%s\x1b[0m', text),
+  green: (text) => console.log('\x1b[32m%s\x1b[0m', text),
+  yellow: (text) => console.log('\x1b[33m%s\x1b[0m', text),
+  red: (text) => console.log('\x1b[31m%s\x1b[0m', text),
+  cyan: (text) => console.log('\x1b[36m%s\x1b[0m', text)
+};
 
 // Definición de tarjetas de prueba de Stripe para diferentes escenarios
 const STRIPE_TEST_CARDS = [
@@ -149,13 +157,13 @@ Para más información, consulta la [documentación de Stripe sobre tarjetas de 
   // Escribir archivo
   fs.writeFileSync(outputPath, markdown);
   
-  console.log(chalk.green(`✅ Archivo de tarjetas de prueba generado en: ${outputPath}`));
+  log.green(`✅ Archivo de tarjetas de prueba generado en: ${outputPath}`);
 }
 
 // Ejecutar generación
 try {
   generateStripeCardsMarkdown();
 } catch (error) {
-  console.error(chalk.red('❌ Error al generar archivo de tarjetas de prueba:'), error);
+  console.error('\x1b[31m%s\x1b[0m', '❌ Error al generar archivo de tarjetas de prueba:', error);
   process.exit(1);
 }
