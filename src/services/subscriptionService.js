@@ -38,7 +38,17 @@ class SubscriptionService {
     }
   }
 
-  async createSubscription(profileId, organizationId, paymentMethodId, planId) {
+  /**
+   * Crea una nueva suscripción en Stripe
+   * 
+   * @param {string} profileId - ID del perfil que realiza la suscripción
+   * @param {string} organizationId - ID de la organización a la que pertenece el perfil
+   * @param {string} paymentMethodId - ID del método de pago en Stripe
+   * @param {string} planId - ID del plan (price) en Stripe
+   * @param {string} [couponId] - ID del cupón de descuento (opcional)
+   * @returns {Promise<Object>} - Datos de la suscripción creada
+   */
+  async createSubscription(profileId, organizationId, paymentMethodId, planId, couponId = null) {
     try {
       const profile = await Profile.findByPk(profileId);
       
@@ -89,8 +99,8 @@ class SubscriptionService {
         },
       });
       
-      // Crear suscripción en Stripe
-      const subscription = await stripe.subscriptions.create({
+      // Preparar los datos para crear la suscripción
+      const subscriptionData = {
         customer: profile.stripeCustomerId,
         items: [{ price: planId }],
         expand: ['latest_invoice.payment_intent'],
@@ -98,7 +108,24 @@ class SubscriptionService {
           profileId: profileId,
           organizationId: organizationId
         }
-      });
+      };
+      
+      // Añadir cupón si se proporciona
+      if (couponId) {
+        // Verificar que el cupón existe
+        try {
+          const coupon = await stripe.coupons.retrieve(couponId);
+          // Si el cupón existe, añadirlo a la suscripción
+          subscriptionData.coupon = couponId;
+          logger.info(`Aplicando cupón ${couponId} a la suscripción`);
+        } catch (couponError) {
+          logger.warn(`El cupón ${couponId} no existe o no es válido:`, couponError.message);
+          // No añadir el cupón si no existe, pero continuar con la creación de la suscripción
+        }
+      }
+      
+      // Crear suscripción en Stripe
+      const subscription = await stripe.subscriptions.create(subscriptionData);
       
       // Extraer el client_secret con manejo de errores (puede no existir en el mock)
       let clientSecret = null;
@@ -118,11 +145,27 @@ class SubscriptionService {
         logger.info('Error al obtener client_secret, usando uno ficticio:', error.message);
       }
       
-      return {
+      // Preparar respuesta con información sobre el cupón aplicado
+      const response = {
         subscriptionId: subscription.id,
         status: subscription.status || 'active',
-        clientSecret
+        clientSecret,
+        hasCoupon: false
       };
+      
+      // Añadir información del cupón si existe
+      if (subscription.discount && subscription.discount.coupon) {
+        response.hasCoupon = true;
+        response.coupon = {
+          id: subscription.discount.coupon.id,
+          name: subscription.discount.coupon.name || 'Cupón de descuento',
+          amountOff: subscription.discount.coupon.amount_off,
+          percentOff: subscription.discount.coupon.percent_off,
+          duration: subscription.discount.coupon.duration
+        };
+      }
+      
+      return response;
     } catch (error) {
       // Si es un error definido por nosotros, preservar el statusCode
       if (!error.statusCode) {
@@ -725,6 +768,297 @@ class SubscriptionService {
     // No necesitamos sincronizar con una base de datos local
     logger.info(`Evento Stripe recibido: ${event.type}`);
     return { received: true };
+  }
+  
+  /**
+   * Obtiene la lista de cupones disponibles en Stripe
+   * @param {number} [limit=20] - Límite de cupones a retornar
+   * @returns {Promise<Array>} - Lista de cupones disponibles
+   */
+  async getAvailableCoupons(limit = 20) {
+    try {
+      // Si estamos en entorno de prueba/desarrollo
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      
+      if (useStripeMock) {
+        try {
+          // Intentar obtener cupones de Stripe Mock
+          const stripeCoupons = await stripe.coupons.list({ limit });
+          
+          // Si hay resultados y parecen válidos, usarlos
+          if (stripeCoupons.data && stripeCoupons.data.length > 0) {
+            return stripeCoupons.data.map(coupon => ({
+              id: coupon.id,
+              name: coupon.name || 'Descuento',
+              amountOff: coupon.amount_off,
+              percentOff: coupon.percent_off,
+              duration: coupon.duration,
+              durationInMonths: coupon.duration_in_months,
+              valid: true
+            }));
+          }
+        } catch (stripeError) {
+          logger.warn('Error al obtener cupones de Stripe Mock:', stripeError.message);
+        }
+        
+        // Si llegamos aquí, generar datos de prueba
+        return this._generateMockCoupons();
+      }
+      
+      // En entorno real, obtener cupones directamente de Stripe
+      const stripeCoupons = await stripe.coupons.list({ limit });
+      
+      return stripeCoupons.data.map(coupon => ({
+        id: coupon.id,
+        name: coupon.name || 'Descuento',
+        amountOff: coupon.amount_off,
+        percentOff: coupon.percent_off,
+        duration: coupon.duration,
+        durationInMonths: coupon.duration_in_months,
+        valid: true
+      }));
+    } catch (error) {
+      logger.error('Error al obtener cupones disponibles:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Genera cupones de prueba para entorno de desarrollo
+   * @returns {Array} - Lista de cupones de prueba
+   */
+  _generateMockCoupons() {
+    const mockCoupons = [
+      {
+        id: 'WELCOME10',
+        name: 'Bienvenida: 10% de descuento',
+        percentOff: 10,
+        duration: 'once',
+        valid: true
+      },
+      {
+        id: 'PREMIUM20',
+        name: 'Premium: 20% de descuento',
+        percentOff: 20,
+        duration: 'once',
+        valid: true
+      },
+      {
+        id: 'YEARLYPLAN',
+        name: 'Plan anual: 15% de descuento',
+        percentOff: 15,
+        duration: 'forever',
+        valid: true
+      },
+      {
+        id: 'FIRST5EUR',
+        name: '5€ de descuento en primera suscripción',
+        amountOff: 500, // en céntimos
+        duration: 'once',
+        valid: true
+      },
+      {
+        id: 'TEAM25',
+        name: '25% descuento para equipos',
+        percentOff: 25,
+        duration: 'repeating',
+        durationInMonths: 3,
+        valid: true
+      }
+    ];
+    
+    return mockCoupons;
+  }
+  
+  /**
+   * Obtiene información detallada sobre planes/precios disponibles en Stripe
+   * @returns {Promise<Array>} - Lista de planes disponibles
+   */
+  async getAvailablePlans() {
+    try {
+      // Si estamos en entorno de prueba/desarrollo
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      
+      if (useStripeMock) {
+        try {
+          // Intentar obtener planes de Stripe Mock
+          const stripePrices = await stripe.prices.list({
+            active: true,
+            expand: ['data.product']
+          });
+          
+          // Si hay resultados y parecen válidos, usarlos
+          if (stripePrices.data && stripePrices.data.length > 0 && 
+              !stripePrices.data.every(price => !price.product || typeof price.product === 'string')) {
+            return stripePrices.data.map(price => ({
+              id: price.id,
+              productId: typeof price.product === 'object' ? price.product.id : price.product,
+              name: typeof price.product === 'object' ? (price.product.name || 'Plan') : 'Plan',
+              description: typeof price.product === 'object' ? price.product.description : '',
+              unitAmount: price.unit_amount,
+              currency: price.currency,
+              interval: price.recurring ? price.recurring.interval : 'month',
+              intervalCount: price.recurring ? price.recurring.interval_count : 1,
+              active: price.active
+            }));
+          }
+        } catch (stripeError) {
+          logger.warn('Error al obtener planes de Stripe Mock:', stripeError.message);
+        }
+        
+        // Si llegamos aquí, generar datos de prueba
+        return this._generateMockPlans();
+      }
+      
+      // En entorno real, obtener planes directamente de Stripe
+      const stripePrices = await stripe.prices.list({
+        active: true,
+        expand: ['data.product']
+      });
+      
+      return stripePrices.data.map(price => ({
+        id: price.id,
+        productId: typeof price.product === 'object' ? price.product.id : price.product,
+        name: typeof price.product === 'object' ? (price.product.name || 'Plan') : 'Plan',
+        description: typeof price.product === 'object' ? price.product.description : '',
+        unitAmount: price.unit_amount,
+        currency: price.currency,
+        interval: price.recurring ? price.recurring.interval : 'month',
+        intervalCount: price.recurring ? price.recurring.interval_count : 1,
+        active: price.active
+      }));
+    } catch (error) {
+      logger.error('Error al obtener planes disponibles:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Genera planes de prueba para entorno de desarrollo
+   * @returns {Array} - Lista de planes de prueba
+   */
+  _generateMockPlans() {
+    const mockPlans = [
+      {
+        id: 'price_basic_monthly',
+        productId: 'prod_basic',
+        name: 'Plan Básico',
+        description: 'Plan mensual con funcionalidades básicas',
+        unitAmount: 999, // 9.99€ en céntimos
+        currency: 'eur',
+        interval: 'month',
+        intervalCount: 1,
+        active: true
+      },
+      {
+        id: 'price_premium_monthly',
+        productId: 'prod_premium',
+        name: 'Plan Premium',
+        description: 'Plan mensual con todas las funcionalidades premium',
+        unitAmount: 2999, // 29.99€ en céntimos
+        currency: 'eur',
+        interval: 'month',
+        intervalCount: 1,
+        active: true
+      },
+      {
+        id: 'price_enterprise_monthly',
+        productId: 'prod_enterprise',
+        name: 'Plan Enterprise',
+        description: 'Plan empresarial con soporte premium y funcionalidades avanzadas',
+        unitAmount: 9999, // 99.99€ en céntimos
+        currency: 'eur',
+        interval: 'month',
+        intervalCount: 1,
+        active: true
+      },
+      {
+        id: 'price_basic_yearly',
+        productId: 'prod_basic',
+        name: 'Plan Básico Anual',
+        description: 'Plan anual con funcionalidades básicas (15% descuento)',
+        unitAmount: 10190, // 101.90€ en céntimos (~10% descuento sobre mensual x12)
+        currency: 'eur',
+        interval: 'year',
+        intervalCount: 1,
+        active: true
+      },
+      {
+        id: 'price_premium_yearly',
+        productId: 'prod_premium',
+        name: 'Plan Premium Anual',
+        description: 'Plan anual con todas las funcionalidades premium (15% descuento)',
+        unitAmount: 30590, // 305.90€ en céntimos (~15% descuento sobre mensual x12)
+        currency: 'eur',
+        interval: 'year',
+        intervalCount: 1,
+        active: true
+      }
+    ];
+    
+    return mockPlans;
+  }
+  
+  /**
+   * Verifica si un usuario puede ver un método de pago específico
+   * @param {string} paymentMethodId - ID del método de pago
+   * @param {string} profileId - ID del perfil que intenta acceder
+   * @param {string} organizationId - ID de la organización a la que pertenece el perfil
+   * @param {Array} roles - Roles del usuario
+   * @returns {Promise<boolean>} - True si puede ver, false si no
+   */
+  async canViewPaymentMethod(paymentMethodId, profileId, organizationId, roles = []) {
+    try {
+      // En entorno de mock, simplificar la lógica
+      if (process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true') {
+        // Administradores pueden ver cualquier método de pago
+        if (roles.includes('ADMIN')) {
+          return true;
+        }
+        
+        // En mock, asumimos que el ID del método de pago contiene el ID del perfil
+        const mockIdPattern = new RegExp(`${profileId.substring(0, 8)}`);
+        return mockIdPattern.test(paymentMethodId);
+      }
+      
+      // En producción, verificar a través de Stripe
+      try {
+        // Obtener el método de pago de Stripe
+        const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+        
+        // Si no tiene un customer asociado, no podemos verificar el dueño
+        if (!paymentMethod.customer) {
+          return false;
+        }
+        
+        // Buscar perfil que tenga este customer ID
+        const profile = await Profile.findOne({
+          where: { stripeCustomerId: paymentMethod.customer }
+        });
+        
+        if (!profile) {
+          return false;
+        }
+        
+        // Si es el propio perfil, permitir acceso
+        if (profile.id === profileId) {
+          return true;
+        }
+        
+        // Si es admin y de la misma organización, permitir acceso
+        if (roles.includes('ADMIN') && profile.organizationId === organizationId) {
+          return true;
+        }
+        
+        return false;
+      } catch (stripeError) {
+        logger.error('Error al verificar método de pago en Stripe:', stripeError.message);
+        return false;
+      }
+    } catch (error) {
+      logger.error('Error al verificar permisos para método de pago:', error);
+      return false;
+    }
   }
 }
 

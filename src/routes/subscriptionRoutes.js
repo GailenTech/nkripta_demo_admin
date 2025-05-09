@@ -1,7 +1,7 @@
 // src/routes/subscriptionRoutes.js
 const express = require('express');
 const subscriptionController = require('../controllers/subscriptionController');
-const { auth } = require('../middleware/auth');
+const { auth, checkRole } = require('../middleware/auth');
 const { subscriptionValidationRules, validateRequest } = require('../utils/validators');
 
 const router = express.Router();
@@ -25,6 +25,13 @@ router.get('/profiles/:profileId/subscriptions', auth, subscriptionController.ge
 
 // Gestión de clientes de Stripe
 router.post('/customers', auth, subscriptionController.createCustomer);
+
+// Métodos de pago
+router.get('/payment-methods/:paymentMethodId', auth, subscriptionController.getPaymentMethod);
+
+// Planes y cupones
+router.get('/plans', auth, subscriptionController.getAvailablePlans);
+router.get('/coupons', auth, checkRole(['ADMIN']), subscriptionController.getAvailableCoupons);
 
 // Webhooks de Stripe
 router.post('/webhook', express.raw({ type: 'application/json' }), subscriptionController.handleWebhook);

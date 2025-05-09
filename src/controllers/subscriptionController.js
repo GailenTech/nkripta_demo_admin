@@ -15,13 +15,14 @@ const createCustomer = async (req, res, next) => {
 
 const createSubscription = async (req, res, next) => {
   try {
-    const { paymentMethodId, planId } = req.body;
+    const { paymentMethodId, planId, couponId } = req.body;
     
     const result = await subscriptionService.createSubscription(
       req.user.profileId,
       req.user.organizationId,
       paymentMethodId,
-      planId
+      planId,
+      couponId || null
     );
     
     return res.status(201).json(result);
@@ -169,6 +170,81 @@ const getAllSubscriptions = async (req, res, next) => {
   }
 };
 
+const getAvailablePlans = async (req, res, next) => {
+  try {
+    const plans = await subscriptionService.getAvailablePlans();
+    return res.json(plans);
+  } catch (error) {
+    logger.error('Error al obtener planes disponibles:', error);
+    next(error);
+  }
+};
+
+const getAvailableCoupons = async (req, res, next) => {
+  try {
+    // Solo admins pueden ver todos los cupones
+    if (!req.user.roles.includes('ADMIN')) {
+      return res.status(403).json({ message: 'No autorizado para ver cupones' });
+    }
+    
+    const coupons = await subscriptionService.getAvailableCoupons();
+    return res.json(coupons);
+  } catch (error) {
+    logger.error('Error al obtener cupones disponibles:', error);
+    next(error);
+  }
+};
+
+// Obtener detalles de método de pago
+const getPaymentMethod = async (req, res, next) => {
+  try {
+    const { paymentMethodId } = req.params;
+    
+    // Verificar que el usuario tiene permisos para ver este método de pago
+    const canView = await subscriptionService.canViewPaymentMethod(
+      paymentMethodId,
+      req.user.profileId,
+      req.user.organizationId,
+      req.user.roles || []
+    );
+    
+    if (!canView) {
+      return res.status(403).json({ message: 'No autorizado para ver este método de pago' });
+    }
+    
+    // En entorno de desarrollo/mock
+    if (process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true') {
+      return res.json({
+        id: paymentMethodId,
+        type: 'card',
+        card: {
+          brand: 'visa',
+          last4: '4242',
+          exp_month: 12,
+          exp_year: 2025
+        },
+        billing_details: {
+          address: {
+            city: 'Madrid',
+            country: 'ES',
+            line1: 'Calle Principal 123',
+            postal_code: '28001'
+          },
+          email: req.user.email,
+          name: req.user.firstName + ' ' + req.user.lastName
+        }
+      });
+    }
+    
+    // En producción, obtener de Stripe
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    return res.json(paymentMethod);
+  } catch (error) {
+    logger.error('Error al obtener método de pago:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   createCustomer,
   createSubscription,
@@ -176,5 +252,8 @@ module.exports = {
   getSubscription,
   getProfileSubscriptions,
   getAllSubscriptions,
+  getAvailablePlans,
+  getAvailableCoupons,
+  getPaymentMethod,
   handleWebhook
 };
