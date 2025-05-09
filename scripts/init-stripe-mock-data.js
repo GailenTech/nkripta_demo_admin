@@ -42,7 +42,6 @@ async function initializeStripeMockData() {
     
     // Producto para Plan Básico
     const basicProduct = await stripe.products.create({
-      id: 'prod_basic',
       name: 'Nkripta Básico',
       description: 'Plan básico de Nkripta - Acceso a funcionalidades esenciales'
     });
@@ -50,7 +49,6 @@ async function initializeStripeMockData() {
     
     // Precio para Plan Básico
     const basicPrice = await stripe.prices.create({
-      id: PLANS.BASIC.id,
       product: basicProduct.id,
       unit_amount: PLANS.BASIC.price,
       currency: PLANS.BASIC.currency,
@@ -60,7 +58,6 @@ async function initializeStripeMockData() {
     
     // Producto para Plan Premium
     const premiumProduct = await stripe.products.create({
-      id: 'prod_premium',
       name: 'Nkripta Premium',
       description: 'Plan premium de Nkripta - Acceso a todas las funcionalidades'
     });
@@ -68,7 +65,6 @@ async function initializeStripeMockData() {
     
     // Precio para Plan Premium
     const premiumPrice = await stripe.prices.create({
-      id: PLANS.PREMIUM.id,
       product: premiumProduct.id,
       unit_amount: PLANS.PREMIUM.price,
       currency: PLANS.PREMIUM.currency,
@@ -115,7 +111,7 @@ async function initializeStripeMockData() {
         }
         
         // Crear suscripción en Stripe
-        const priceId = subscription.planType === 'plan_basic' ? PLANS.BASIC.id : PLANS.PREMIUM.id;
+        const priceId = subscription.planType === 'plan_basic' ? basicPrice.id : premiumPrice.id;
         
         const stripeSub = await stripe.subscriptions.create({
           customer: customerId,
@@ -126,9 +122,18 @@ async function initializeStripeMockData() {
           }
         });
         
+        // Determinar tipo de plan para actualizar en la base de datos
+        let dbPlanType = subscription.planType;
+        if (subscription.planType === 'plan_basic' && basicPrice) {
+          dbPlanType = basicPrice.id;  // Usar el ID del precio generado por Stripe
+        } else if (subscription.planType === 'plan_premium' && premiumPrice) {
+          dbPlanType = premiumPrice.id;  // Usar el ID del precio generado por Stripe
+        }
+        
         // Actualizar suscripción en la base de datos
         await subscription.update({ 
           stripeSubscriptionId: stripeSub.id,
+          planType: dbPlanType,  // Actualizar al ID generado por Stripe
           currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
           currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
           status: stripeSub.status

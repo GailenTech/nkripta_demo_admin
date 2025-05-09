@@ -173,8 +173,8 @@ function App() {
               <TableCell>
                 {sub.planPrice ? 
                   `${sub.planPrice} ${sub.planCurrency?.toUpperCase() || 'EUR'}` : 
-                  sub.planType === 'plan_basic' ? '9.99 EUR' :
-                  sub.planType === 'plan_premium' ? '29.99 EUR' : 'N/A'}
+                  (sub.planType === 'plan_basic' || sub.planType?.includes('999')) ? '9.99 EUR' :
+                  (sub.planType === 'plan_premium' || sub.planType?.includes('2999')) ? '29.99 EUR' : 'N/A'}
               </TableCell>
               <TableCell>{sub.status || 'N/A'}</TableCell>
               <TableCell>{sub.customerEmail || 'N/A'}</TableCell>

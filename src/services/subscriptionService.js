@@ -284,10 +284,25 @@ class SubscriptionService {
           // Transformar las suscripciones de Stripe al formato esperado
           return stripeSubscriptions.data.map(stripeSub => {
             // Buscar datos adicionales en la base de datos
+            // Determinar el tipo de plan basado en el precio
+            let planType = 'desconocido';
+            if (stripeSub.items && stripeSub.items.data && stripeSub.items.data.length > 0) {
+              // Tratamos de determinar qué plan es basado en el precio
+              const priceAmount = stripeSub.items.data[0].price.unit_amount;
+              if (priceAmount === 999) {
+                planType = 'plan_basic';
+              } else if (priceAmount === 2999) {
+                planType = 'plan_premium';
+              } else {
+                // Usamos el ID como fallback
+                planType = stripeSub.items.data[0].price.id;
+              }
+            }
+            
             const subscription = {
               id: stripeSub.id,
               stripeSubscriptionId: stripeSub.id,
-              planType: stripeSub.items.data[0].price.id,
+              planType: planType,
               status: stripeSub.status,
               currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
               currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
@@ -295,13 +310,17 @@ class SubscriptionService {
               createdAt: new Date(stripeSub.created * 1000),
               updatedAt: new Date(),
               // Datos del cliente
-              profileId: stripeSub.metadata.profileId || 'desconocido',
-              organizationId: stripeSub.metadata.organizationId || 'desconocido',
+              profileId: stripeSub.metadata?.profileId || 'desconocido',
+              organizationId: stripeSub.metadata?.organizationId || 'desconocido',
               // Datos adicionales
-              planName: stripeSub.items.data[0].price.product.name || 'Plan Desconocido',
-              planPrice: stripeSub.items.data[0].price.unit_amount / 100,
-              planCurrency: stripeSub.items.data[0].price.currency,
-              customerEmail: stripeSub.customer ? stripeSub.customer.email : 'desconocido'
+              planName: stripeSub.items?.data[0]?.price?.product?.name || 
+                        (planType === 'plan_basic' ? 'Nkripta Básico' : 
+                         planType === 'plan_premium' ? 'Nkripta Premium' : 'Plan Desconocido'),
+              planPrice: stripeSub.items?.data[0]?.price?.unit_amount / 100 || 
+                         (planType === 'plan_basic' ? 9.99 : 
+                          planType === 'plan_premium' ? 29.99 : 0),
+              planCurrency: stripeSub.items?.data[0]?.price?.currency || 'eur',
+              customerEmail: stripeSub.customer?.email || 'desconocido'
             };
             
             return subscription;
