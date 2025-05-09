@@ -13,7 +13,7 @@ class AuthService {
         throw new Error('La organización especificada no existe');
       }
 
-      // Registrar usuario en Cognito
+      // Registrar usuario en Cognito con todos los atributos necesarios
       const params = {
         ClientId: cognitoConfig.ClientId,
         Username: userData.email,
@@ -26,22 +26,39 @@ class AuthService {
           {
             Name: 'custom:organizationId',
             Value: userData.organizationId
+          },
+          {
+            Name: 'given_name',
+            Value: userData.firstName || ''
+          },
+          {
+            Name: 'family_name',
+            Value: userData.lastName || ''
+          },
+          {
+            Name: 'custom:roles',
+            Value: JSON.stringify(userData.roles || ['USER'])
           }
         ]
       };
 
+      // Añadir campos opcionales si están presentes
+      if (userData.phone) {
+        params.UserAttributes.push({
+          Name: 'phone_number',
+          Value: userData.phone
+        });
+      }
+
       const cognitoResponse = await cognitoIdentityServiceProvider.signUp(params).promise();
       const sub = cognitoResponse.UserSub;
 
-      // Crear perfil en la base de datos
+      // Crear perfil en la base de datos (con referencia a Cognito, pero sin duplicar datos)
       const profile = await Profile.create({
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        email: userData.email,
-        cognitoUsername: sub,
-        sub,
-        organizationId: userData.organizationId,
-        roles: userData.roles || ['USER']
+        email: userData.email, // Mantenemos el email para búsquedas rápidas
+        sub, // Identificador único de Cognito
+        organizationId: userData.organizationId, // Relación esencial con la organización
+        roles: userData.roles || ['USER'] // Mantener roles localmente para control de acceso rápido
       });
 
       return {
@@ -70,24 +87,46 @@ class AuthService {
       const cognitoResponse = await cognitoIdentityServiceProvider.initiateAuth(params).promise();
       const { AccessToken, IdToken, RefreshToken } = cognitoResponse.AuthenticationResult;
 
-      // Obtener perfil del usuario
+      // Obtener datos del usuario desde Cognito
+      const userParams = {
+        AccessToken: AccessToken
+      };
+      const cognitoUser = await cognitoIdentityServiceProvider.getUser(userParams).promise();
+      
+      // Parsear atributos de usuario
+      const userAttributes = {};
+      cognitoUser.UserAttributes.forEach(attr => {
+        userAttributes[attr.Name] = attr.Value;
+      });
+
+      // Obtener referencia al perfil en la base de datos
       const profile = await Profile.findOne({
         where: { email },
         include: [{ model: Organization }]
       });
 
       if (!profile) {
+        logger.error(`Perfil de usuario no encontrado para email: ${email}`);
         throw new Error('Perfil de usuario no encontrado');
       }
 
-      // Generar token JWT para uso interno
+      // Extraer roles desde Cognito (o usar los de la base de datos como fallback)
+      let roles;
+      try {
+        roles = userAttributes['custom:roles'] ? JSON.parse(userAttributes['custom:roles']) : profile.roles;
+      } catch (e) {
+        logger.warn('Error al parsear roles desde Cognito, usando roles locales', e);
+        roles = profile.roles;
+      }
+
+      // Generar token JWT para uso interno con datos de Cognito
       const token = jwt.sign(
         {
-          sub: profile.sub,
-          email: profile.email,
+          sub: userAttributes.sub,
+          email: userAttributes.email,
           profileId: profile.id,
-          organizationId: profile.organizationId,
-          roles: profile.roles
+          organizationId: userAttributes['custom:organizationId'] || profile.organizationId,
+          roles: roles
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
@@ -100,10 +139,10 @@ class AuthService {
         token,
         profile: {
           id: profile.id,
-          email: profile.email,
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          roles: profile.roles,
+          email: userAttributes.email,
+          firstName: userAttributes.given_name || '',
+          lastName: userAttributes.family_name || '',
+          roles: roles,
           organization: profile.Organization ? {
             id: profile.Organization.id,
             name: profile.Organization.name
@@ -120,14 +159,49 @@ class AuthService {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // Verificar si el usuario sigue existiendo
+      // Verificar si el usuario sigue existiendo en la base de datos local
       const profile = await Profile.findOne({
         where: { id: decoded.profileId },
         include: [{ model: Organization }]
       });
 
       if (!profile) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuario no encontrado en la base de datos local');
+      }
+
+      // Intentar obtener datos actualizados desde Cognito si tenemos un accessToken
+      // Nota: Este paso puede omitirse en verificaciones frecuentes para mejorar el rendimiento
+      // En una implementación completa, podrías añadir un parámetro para controlar esto
+      if (decoded.accessToken) {
+        try {
+          const userParams = {
+            AccessToken: decoded.accessToken
+          };
+          const cognitoUser = await cognitoIdentityServiceProvider.getUser(userParams).promise();
+          
+          // Parsear atributos de usuario
+          const userAttributes = {};
+          cognitoUser.UserAttributes.forEach(attr => {
+            userAttributes[attr.Name] = attr.Value;
+          });
+          
+          // Actualizar campos si es necesario (ejemplo: roles)
+          if (userAttributes['custom:roles']) {
+            try {
+              const cognitoRoles = JSON.parse(userAttributes['custom:roles']);
+              if (JSON.stringify(cognitoRoles) !== JSON.stringify(profile.roles)) {
+                profile.roles = cognitoRoles;
+                await profile.save();
+                logger.info(`Roles actualizados desde Cognito para el usuario ${profile.email}`);
+              }
+            } catch (e) {
+              logger.warn('Error al parsear roles desde Cognito', e);
+            }
+          }
+        } catch (cognitoError) {
+          // Si hay un error al obtener datos de Cognito, continuamos con los datos locales
+          logger.warn('No se pudieron obtener datos actualizados de Cognito:', cognitoError.message);
+        }
       }
 
       return {
