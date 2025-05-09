@@ -11,8 +11,11 @@
 
 require('dotenv').config();
 const { stripe } = require('../src/config/stripe');
-const { Profile, Subscription } = require('../src/models');
+const { sequelize } = require('../src/config/database');
 const logger = require('../src/utils/logger');
+
+// Solo importamos los modelos después de verificar la conexión
+let Profile, Subscription;
 
 // Planes de suscripción para inicializar
 const PLANS = {
@@ -36,6 +39,21 @@ const PLANS = {
 async function initializeStripeMockData() {
   try {
     console.log('🚀 Inicializando datos en Stripe Mock');
+    
+    // Intentar conectar a la base de datos
+    try {
+      console.log('🔄 Conectando a la base de datos...');
+      await sequelize.authenticate();
+      console.log('✅ Conexión a base de datos exitosa');
+      
+      // Cargar modelos después de verificar conexión
+      const models = require('../src/models');
+      Profile = models.Profile;
+      Subscription = models.Subscription;
+    } catch (dbError) {
+      console.error('❌ Error al conectar a la base de datos:', dbError.message);
+      console.log('⚠️ Continuando solo con operaciones de Stripe. No se sincronizarán datos a la base de datos.');
+    }
     
     // 1. Crear productos y planes
     console.log('\n📦 Creando productos y precios en Stripe...');
@@ -74,6 +92,13 @@ async function initializeStripeMockData() {
     
     // 2. Crear clientes y suscripciones para los perfiles existentes
     console.log('\n👥 Creando clientes y suscripciones para perfiles existentes...');
+    
+    // Verificar si pudimos conectar a la base de datos
+    if (!Profile || !Subscription) {
+      console.log('⚠️ No se pudo conectar a la base de datos. No se crearán clientes ni suscripciones.');
+      console.log('✅ Los productos y planes de precios se crearon correctamente en Stripe.');
+      return;
+    }
     
     // Obtener todos los perfiles
     const profiles = await Profile.findAll();

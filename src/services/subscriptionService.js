@@ -276,6 +276,17 @@ class SubscriptionService {
           // Obtener suscripciones desde Stripe
           logger.info('Obteniendo suscripciones directamente desde Stripe');
           
+          // Comprobar que Stripe Mock está activo
+          let stripeStatus;
+          try {
+            // Hacemos una petición simple para comprobar que el servicio está activo
+            stripeStatus = await stripe.balance.retrieve();
+            logger.info('Conexión con Stripe Mock verificada.');
+          } catch (stripeConnectionError) {
+            logger.error('No se pudo establecer conexión con Stripe Mock:', stripeConnectionError.message);
+            throw new Error('No se pudo establecer conexión con Stripe Mock');
+          }
+          
           const stripeSubscriptions = await stripe.subscriptions.list({
             limit: 100,
             expand: ['data.customer', 'data.plan.product']

@@ -223,7 +223,18 @@ function App() {
           ) : error ? (
             <Paper>
               <Box p={3}>
+                <Typography variant="h6" color="error">Error al cargar datos:</Typography>
                 <Typography color="error">{error}</Typography>
+                <Box mt={2}>
+                  <Typography variant="body2">
+                    Posibles soluciones:
+                  </Typography>
+                  <ul>
+                    <li>Verifica que el servidor backend esté ejecutándose</li>
+                    <li>Ejecuta './scripts/reset-environment.sh' para reiniciar el entorno</li>
+                    <li>Edita '.env' y cambia USE_STRIPE_MOCK=false para usar solo la base de datos</li>
+                  </ul>
+                </Box>
               </Box>
             </Paper>
           ) : (
