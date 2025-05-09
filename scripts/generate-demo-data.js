@@ -13,7 +13,7 @@ require('dotenv').config();
 const { sequelize } = require('../src/config/database');
 const Organization = require('../src/models/organization');
 const Profile = require('../src/models/profile');
-const Subscription = require('../src/models/subscription');
+const { stripe } = require('../src/config/stripe');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 
@@ -255,38 +255,92 @@ async function generateDemoData() {
         
         log.green(`  ✅ Perfil creado: ${profile.firstName} ${profile.lastName} (${profile.email})`);
         
-        // Crear suscripción
-        const now = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 1);
+        // Crear cliente real en Stripe
+        let stripeCustomerId;
+        try {
+          // Intentar crear un cliente real en Stripe
+          const customer = await stripe.customers.create({
+            email: profile.email,
+            name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim(),
+            metadata: {
+              profileId: profile.id,
+              organizationId: profile.organizationId
+            }
+          });
+          
+          // Actualizar el perfil con el ID de cliente real
+          stripeCustomerId = customer.id;
+          profile.stripeCustomerId = stripeCustomerId;
+          await profile.save();
+          
+          log.green(`    ✅ Cliente Stripe creado: ${stripeCustomerId}`);
+        } catch (stripeError) {
+          log.yellow(`    ⚠️ No se pudo crear cliente en Stripe: ${stripeError.message}`);
+          // Mantener el ID ficticio
+          stripeCustomerId = profile.stripeCustomerId;
+        }
         
-        const subscription = await Subscription.create({
-          id: uuidv4(),
-          stripeSubscriptionId: generateFakeStripeSubscriptionId(),
-          profileId: profile.id,
-          organizationId: organization.id,
-          planType: userData.plan.id,
-          status: 'active',
-          currentPeriodStart: now,
-          currentPeriodEnd: endDate,
-          cancelAtPeriodEnd: false,
-          createdAt: now,
-          updatedAt: now
-        });
-        
-        log.cyan(`    💰 Suscripción creada: ${userData.plan.name} (${userData.plan.price}€)`);
+        // Crear producto y precio en Stripe
+        try {
+          // 1. Primero crear un producto
+          const product = await stripe.products.create({
+            name: userData.plan.name,
+            metadata: {
+              plan_id: userData.plan.id
+            }
+          });
+          
+          // 2. Luego crear un precio para ese producto
+          const price = await stripe.prices.create({
+            product: product.id,
+            unit_amount: Math.round(userData.plan.price * 100),
+            currency: 'eur',
+            recurring: {
+              interval: 'month'
+            }
+          });
+          
+          // 3. Finalmente crear la suscripción con ese precio
+          const stripeSubscription = await stripe.subscriptions.create({
+            customer: stripeCustomerId,
+            items: [
+              {
+                price: price.id
+              }
+            ],
+            metadata: {
+              profileId: profile.id,
+              organizationId: organization.id
+            }
+          });
+          
+          log.cyan(`    💰 Suscripción Stripe creada: ${userData.plan.name} (${userData.plan.price}€) - ID: ${stripeSubscription.id}`);
+        } catch (stripeError) {
+          log.yellow(`    ⚠️ No se pudo crear suscripción en Stripe: ${stripeError.message}`);
+          log.cyan(`    💰 Simulando suscripción: ${userData.plan.name} (${userData.plan.price}€)`);
+        }
       }
     }
     
     // Estadísticas finales
     const organizationCount = await Organization.count();
     const profileCount = await Profile.count();
-    const subscriptionCount = await Subscription.count();
+    
+    // Intentar obtener el número de suscripciones desde Stripe
+    let subscriptionCount = 0;
+    try {
+      const subscriptions = await stripe.subscriptions.list({
+        limit: 100
+      });
+      subscriptionCount = subscriptions.data.length;
+    } catch (error) {
+      log.yellow('⚠️ No se pudo obtener el número de suscripciones desde Stripe');
+    }
     
     log.blue('\n📈 Estadísticas de datos generados:');
     log.yellow(`  🏢 Organizaciones: ${organizationCount}`);
     log.yellow(`  👥 Perfiles: ${profileCount}`);
-    log.yellow(`  💰 Suscripciones: ${subscriptionCount}`);
+    log.yellow(`  💰 Suscripciones Stripe: ${subscriptionCount}`);
     
     log.green('\n✅ Datos de demostración generados correctamente');
     
