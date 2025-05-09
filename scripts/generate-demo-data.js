@@ -203,11 +203,34 @@ async function generateDemoData() {
     await sequelize.authenticate();
     log.green('✅ Conexión a la base de datos establecida');
     
+    // Sincronizar base de datos para asegurar que existen las tablas
+    log.yellow('🔄 Sincronizando modelos con base de datos...');
+    try {
+      // Sincronizar todo el esquema
+      await sequelize.sync({ alter: true });
+      
+      // Sincronizar cada modelo individualmente para asegurar
+      await Organization.sync({ alter: true });
+      await Profile.sync({ alter: true });
+      await Subscription.sync({ alter: true });
+      
+      log.green('✅ Modelos sincronizados con la base de datos');
+    } catch (syncError) {
+      log.yellow('⚠️ Error al sincronizar algunos modelos: ' + syncError.message);
+      console.error(syncError);
+    }
+    
     // Limpiar datos existentes
     log.yellow('🧹 Limpiando datos existentes...');
-    await Subscription.destroy({ where: {} });
-    await Profile.destroy({ where: {} });
-    await Organization.destroy({ where: {} });
+    try {
+      await Subscription.destroy({ where: {} });
+      await Profile.destroy({ where: {} });
+      await Organization.destroy({ where: {} });
+      log.green('✅ Datos existentes eliminados correctamente');
+    } catch (cleanError) {
+      log.yellow('⚠️ Error al limpiar datos existentes, continuando con la creación...');
+      console.error(cleanError);
+    }
     
     // Crear organizaciones
     const organizations = [];
