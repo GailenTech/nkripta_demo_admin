@@ -1,12 +1,12 @@
 # Interfaz de Administración de Nkripta
 
-Esta es una interfaz simple para visualizar y explorar los datos de la API de Nkripta. Proporciona una forma fácil de ver las organizaciones, perfiles y suscripciones creadas en el sistema.
+Esta interfaz proporciona funcionalidades para visualizar y gestionar organizaciones, perfiles de usuario y suscripciones en el sistema Nkripta.
 
 ## Requisitos
 
 - Node.js y npm instalados
 - API de Nkripta ejecutándose en http://localhost:3000
-- Datos de demostración cargados (ver sección "Datos de Demostración")
+- Datos de demostración cargados (opcional)
 
 ## Instalación
 
@@ -26,75 +26,100 @@ La aplicación se iniciará en http://localhost:3000 o el siguiente puerto dispo
 
 ## Funcionalidades
 
-- **Pestaña Organizaciones**: Muestra todas las organizaciones en el sistema
-- **Pestaña Perfiles**: Muestra todos los perfiles de usuario
-- **Pestaña Suscripciones**: Muestra todas las suscripciones activas
+- **Organizaciones**: Visualización y gestión de compañías
+- **Perfiles**: Visualización y gestión de usuarios 
+- **Suscripciones**: Visualización y gestión del estado de suscripciones
+  - Pausar suscripciones (cancelar al final del período)
+  - Reanudar suscripciones pausadas
+  - Cancelar suscripciones inmediatamente
+  - Ver historial de pagos y facturas
 
 ## Estructura de la Aplicación
 
-- `src/App.js`: Componente principal que maneja la UI y la carga de datos
-- `public/index.html`: Plantilla HTML base
-- `package.json`: Dependencias y scripts del proyecto
+- `/src/App.js`: Componente principal con la estructura general
+- `/src/components/`: Componentes de React para cada sección
+  - `/organizations/`: Componentes para gestión de organizaciones
+  - `/profiles/`: Componentes para gestión de perfiles
+  - `/subscriptions/`: Componentes para gestión de suscripciones
+  - `CreateSubscriptionDialog.js`: Diálogo para crear suscripciones
+  - `SubscriptionDetailDialog.js`: Diálogo con detalles y acciones sobre suscripciones
+- `/src/config/auth.js`: Configuración de autenticación para entorno de desarrollo
+
+## Autenticación
+
+Para el entorno de desarrollo, se utiliza un token JWT estático que se incluye en todas las peticiones a la API. Este token está configurado en `src/config/auth.js` y proporciona acceso administrativo completo.
+
+```javascript
+// En src/config/auth.js
+export const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
+
+export const getAuthHeaders = () => {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${AUTH_TOKEN}`
+  };
+};
+```
+
+Este token se utiliza en todas las llamadas a la API mediante la función `getAuthHeaders()`.
+
+> ⚠️ **IMPORTANTE**: Esta solución es solo para entorno de desarrollo. En producción, se debe implementar autenticación real con Cognito o un sistema similar.
+
+## Gestión de Suscripciones
+
+La interfaz permite gestionar el ciclo de vida completo de las suscripciones:
+
+1. **Ver detalles**: El componente `SubscriptionDetailDialog.js` muestra toda la información de una suscripción
+2. **Pausar**: Marca la suscripción para cancelarse al final del período actual
+3. **Reanudar**: Revierte una pausa, continuando la suscripción
+4. **Cancelar**: Cancela inmediatamente la suscripción
+
+En entorno de desarrollo, se utiliza un sistema de estado en memoria en el backend para simular estas operaciones sin necesidad de Stripe.
 
 ## Datos de Demostración
 
-Para poblar la base de datos con datos de demostración, desde el directorio raíz del proyecto:
+Para poblar la base de datos con datos de demostración, ejecuta desde el directorio raíz:
 
 ```bash
 ./scripts/init-demo-db.sh
 ```
 
-Esto creará:
-- 3 organizaciones
-- 3-4 usuarios por organización
-- Suscripciones a planes Basic (9.99€) y Premium (29.99€)
-
-Para más detalles sobre los datos creados, consulta:
-- `DEMO_DATA.md` en el directorio raíz
-
 ## Solución de Problemas
 
-### API devuelve 404 para `/api/organizations` u otros endpoints
+### Errores de autenticación
 
-1. Asegúrate de que el backend esté ejecutándose:
-   ```bash
-   cd ..
-   npm run dev
+Si recibes errores 401 o 403:
+
+1. Verifica que el backend tenga habilitada la autenticación de desarrollo:
+   ```javascript
+   // En el backend, middleware/auth.js debe contener:
+   if (process.env.NODE_ENV === 'development') {
+     // Set a default admin user for demo purposes
+     req.user = {
+       profileId: '00000000-0000-0000-0000-000000000000',
+       roles: ['ADMIN', 'USER'],
+       // ...
+     };
+     return next();
+   }
    ```
 
-2. Verifica que los datos de demostración estén cargados:
-   ```bash
-   cd ..
-   ./scripts/init-demo-db.sh
-   ```
-
-3. La aplicación está configurada para omitir la autenticación en solicitudes GET para facilitar la demostración.
+2. Asegúrate de que el token en `src/config/auth.js` coincide con el aceptado por el backend
 
 ### La UI no se inicia
 
-1. Comprueba que tienes todas las dependencias instaladas:
+1. Verifica dependencias:
    ```bash
    npm install
    ```
 
-2. Asegúrate de no tener otro servidor ejecutándose en el puerto 3000:
+2. Comprueba que no hay otro servicio en el mismo puerto:
    ```bash
    lsof -i :3000
-   # Si hay algo ejecutándose, termínalo o cambia el puerto en package.json
    ```
 
-## Notas de Desarrollo
+## Notas sobre el Control de Versiones
 
-Esta interfaz de administración es una versión simplificada diseñada para exploración y demostración. Para un entorno de producción, se recomienda:
+Esta interfaz ahora está bajo control de versiones en git. Anteriormente se excluía del repositorio, pero desde mayo de 2025 se ha incluido directamente para facilitar la colaboración.
 
-1. Implementar autenticación real
-2. Añadir funcionalidades de edición y creación
-3. Mejorar el manejo de errores y la validación
-4. Añadir pruebas automatizadas
-
-## Extensiones Futuras
-
-- Implementar autenticación con Cognito
-- Añadir formularios para creación y edición de entidades
-- Añadir gráficos y estadísticas sobre suscripciones
-- Mejorar la navegación y experiencia de usuario
+El script original `create-admin-ui.sh` que generaba esta UI se mantiene por referencia histórica, pero ya no es necesario usarlo para reconstruir la interfaz.
