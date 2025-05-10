@@ -5,8 +5,9 @@ const logger = require('../utils/logger');
 
 const authMiddleware = async (req, res, next) => {
   try {
-    // FOR DEMO PURPOSE ONLY: Skip authentication for GET requests to make the admin UI work
-    if (req.method === 'GET') {
+    // FOR DEMO PURPOSE ONLY: Skip authentication for all requests to make the admin UI work
+    // This is only for development purposes - should be restricted in production
+    if (process.env.NODE_ENV === 'development') {
       // Set a default admin user for demo purposes
       req.user = {
         profileId: '00000000-0000-0000-0000-000000000000',
@@ -48,8 +49,8 @@ const authMiddleware = async (req, res, next) => {
 // Middleware para verificar roles
 const checkRole = (roles) => {
   return (req, res, next) => {
-    // FOR DEMO PURPOSE ONLY: Skip role checking for GET requests
-    if (req.method === 'GET') {
+    // FOR DEMO PURPOSE ONLY: Skip role checking in development mode
+    if (process.env.NODE_ENV === 'development') {
       return next();
     }
     

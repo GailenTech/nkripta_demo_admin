@@ -4,10 +4,14 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Box, CircularProgress, Button, Dialog, DialogTitle, DialogContent, 
   DialogActions, TextField, FormControl, InputLabel, Select, MenuItem,
-  IconButton, Breadcrumbs, Link
+  IconButton, Breadcrumbs, Link, Chip
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CreateSubscriptionDialog from './components/CreateSubscriptionDialog';
+import SubscriptionDetailDialog from './components/SubscriptionDetailDialog';
+import { getAuthHeaders } from './config/auth';
 
 // API URL
 const API_URL = 'http://localhost:3000/api';
@@ -43,6 +47,26 @@ function App() {
     position: '',
     roles: ['USER']
   });
+  
+  // Estados para crear nueva suscripción
+  const [createSubscriptionOpen, setCreateSubscriptionOpen] = useState(false);
+  const [plans, setPlans] = useState([]);
+  const [coupons, setCoupons] = useState([]);
+  const [newSubscription, setNewSubscription] = useState({
+    planId: '',
+    paymentMethodId: 'pm_card_visa', // Mock para entorno de desarrollo
+    couponId: '',
+    cardNumber: '4242424242424242',
+    cardExpiry: '12/25',
+    cardCvc: '123',
+    cardName: ''
+  });
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  
+  // Estados para ver detalles de suscripción
+  const [detailSubscriptionOpen, setDetailSubscriptionOpen] = useState(false);
+  const [selectedSubscription, setSelectedSubscription] = useState(null);
 
   // Cambiar de pestaña
   const handleTabChange = (event, newValue) => {
@@ -66,13 +90,17 @@ function App() {
       setLoading(true);
       try {
         // Cargar organizaciones
-        const orgResponse = await fetch(`${API_URL}/organizations`);
+        const orgResponse = await fetch(`${API_URL}/organizations`, {
+          headers: getAuthHeaders()
+        });
         const orgData = await orgResponse.json();
         console.log('Organizations data:', orgData);
         setOrganizations(orgData.items || orgData || []);
         
         // Cargar perfiles
-        const profileResponse = await fetch(`${API_URL}/profiles`);
+        const profileResponse = await fetch(`${API_URL}/profiles`, {
+          headers: getAuthHeaders()
+        });
         const profileData = await profileResponse.json();
         console.log('Profiles data:', profileData);
         
@@ -87,7 +115,9 @@ function App() {
         }
         
         // Cargar suscripciones (usando el endpoint correcto)
-        const subResponse = await fetch(`${API_URL}/billing`);
+        const subResponse = await fetch(`${API_URL}/billing`, {
+          headers: getAuthHeaders()
+        });
         const subData = await subResponse.json();
         console.log('Subscriptions data:', subData);
         
@@ -119,7 +149,9 @@ function App() {
     
     try {
       // Cargar perfiles de esta organización
-      const profilesResponse = await fetch(`${API_URL}/organizations/${organization.id}/members`);
+      const profilesResponse = await fetch(`${API_URL}/organizations/${organization.id}/members`, {
+        headers: getAuthHeaders()
+      });
       let organizationProfiles = [];
       
       if (profilesResponse.ok) {
@@ -154,7 +186,9 @@ function App() {
     try {
       // Cargar suscripciones de este perfil usando la ruta correcta
       // Probar primero el endpoint correcto
-      const subscriptionsResponse = await fetch(`${API_URL}/billing/profiles/${profile.id}/subscriptions`);
+      const subscriptionsResponse = await fetch(`${API_URL}/billing/profiles/${profile.id}/subscriptions`, {
+        headers: getAuthHeaders()
+      });
       let profileSubscriptions = [];
       
       if (subscriptionsResponse.ok) {
@@ -166,7 +200,9 @@ function App() {
         
         // Intentar con endpoint alternativo filtrando por profileId
         try {
-          const alternativeResponse = await fetch(`${API_URL}/billing/subscriptions?profileId=${profile.id}`);
+          const alternativeResponse = await fetch(`${API_URL}/billing/subscriptions?profileId=${profile.id}`, {
+            headers: getAuthHeaders()
+          });
           if (alternativeResponse.ok) {
             const subscriptionsData = await alternativeResponse.json();
             profileSubscriptions = subscriptionsData.items || subscriptionsData || [];
@@ -187,22 +223,9 @@ function App() {
         }
       }
       
-      // Si no se encontraron suscripciones, generar una de ejemplo para pruebas
+      // Simplemente registrar que no hay suscripciones y continuar
       if (profileSubscriptions.length === 0) {
-        console.log('No se encontraron suscripciones reales, generando ejemplo para propósitos de demostración');
-        profileSubscriptions = [{
-          id: `mock-sub-${profile.id.substring(0, 8)}`,
-          subscriptionId: `sub_${Date.now()}`,
-          profileId: profile.id,
-          planName: 'Plan Básico (Demo)',
-          planType: 'plan_basic',
-          planPrice: 9.99,
-          planCurrency: 'eur',
-          status: 'active',
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 días
-          createdAt: new Date()
-        }];
+        console.log('No se encontraron suscripciones para este perfil');
       }
       
       setProfileSubscriptions(profileSubscriptions);
@@ -211,22 +234,9 @@ function App() {
     } catch (err) {
       console.error("Error al cargar suscripciones del perfil:", err);
       
-      // En caso de error, crear una suscripción de ejemplo para demostración
-      const mockSubscription = {
-        id: `mock-sub-${profile.id.substring(0, 8)}`,
-        subscriptionId: `sub_${Date.now()}`,
-        profileId: profile.id,
-        planName: 'Plan Básico (Demo)',
-        planType: 'plan_basic',
-        planPrice: 9.99,
-        planCurrency: 'eur',
-        status: 'active',
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 días
-        createdAt: new Date()
-      };
-      
-      setProfileSubscriptions([mockSubscription]);
+      // En caso de error, mostrar lista vacía
+      console.log('No fue posible obtener suscripciones debido a un error de comunicación');
+      setProfileSubscriptions([]);
       setView('profile-subscriptions');
       setLoading(false);
     }
@@ -287,9 +297,7 @@ function App() {
       // Llamada a la API para crear perfil
       const response = await fetch(`${API_URL}/profiles`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(profileData)
       });
       
@@ -311,6 +319,131 @@ function App() {
     } catch (error) {
       console.error('Error al crear perfil:', error);
       alert(`Error al crear perfil: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Manejadores para crear nueva suscripción
+  const handleCreateSubscriptionOpen = async () => {
+    setLoadingPlans(true);
+    setLoadingCoupons(true);
+    
+    try {
+      // Cargar planes disponibles
+      const plansResponse = await fetch(`${API_URL}/billing/plans`, {
+        headers: getAuthHeaders()
+      });
+      if (plansResponse.ok) {
+        const plansData = await plansResponse.json();
+        setPlans(plansData);
+        
+        // Preseleccionar el plan básico mensual si existe
+        const basicPlan = plansData.find(plan => 
+          plan.name.toLowerCase().includes('básico') && 
+          plan.interval === 'month'
+        );
+        
+        if (basicPlan) {
+          setNewSubscription(prev => ({
+            ...prev,
+            planId: basicPlan.id
+          }));
+        } else if (plansData.length > 0) {
+          // O el primer plan si no hay uno básico
+          setNewSubscription(prev => ({
+            ...prev,
+            planId: plansData[0].id
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error al cargar planes:', error);
+    } finally {
+      setLoadingPlans(false);
+    }
+    
+    try {
+      // Intentar cargar cupones disponibles (solo para administradores)
+      const couponsResponse = await fetch(`${API_URL}/billing/coupons`, {
+        headers: getAuthHeaders()
+      });
+      if (couponsResponse.ok) {
+        const couponsData = await couponsResponse.json();
+        setCoupons(couponsData);
+      }
+    } catch (error) {
+      console.error('Error al cargar cupones:', error);
+      // No mostrar error si no es admin, simplemente no mostrar cupones
+    } finally {
+      setLoadingCoupons(false);
+    }
+    
+    // Prepopular el nombre de la tarjeta con el nombre del perfil
+    if (selectedProfile) {
+      setNewSubscription(prev => ({
+        ...prev,
+        cardName: `${selectedProfile.firstName} ${selectedProfile.lastName}`
+      }));
+    }
+    
+    setCreateSubscriptionOpen(true);
+  };
+  
+  const handleCreateSubscriptionClose = () => {
+    setCreateSubscriptionOpen(false);
+  };
+  
+  const handleSubscriptionChange = (e) => {
+    const { name, value } = e.target;
+    setNewSubscription(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+  
+  const handleCreateSubscription = async () => {
+    try {
+      setLoading(true);
+      
+      // En un entorno real, aquí se crearía primero el método de pago 
+      // usando Stripe Elements o similar. Para simplificar, usaremos un ID mock.
+      
+      // Preparar datos de la suscripción
+      const subscriptionData = {
+        planId: newSubscription.planId,
+        paymentMethodId: newSubscription.paymentMethodId
+      };
+      
+      // Añadir cupón si se seleccionó uno
+      if (newSubscription.couponId) {
+        subscriptionData.couponId = newSubscription.couponId;
+      }
+      
+      // Llamada a la API para crear suscripción
+      const response = await fetch(`${API_URL}/billing/subscriptions`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(subscriptionData)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Suscripción creada:', result);
+        
+        // Refrescar lista de suscripciones
+        await handleProfileClick(selectedProfile);
+        
+        // Cerrar diálogo
+        setCreateSubscriptionOpen(false);
+      } else {
+        const errorData = await response.json();
+        console.error('Error al crear suscripción:', errorData);
+        alert(`Error al crear suscripción: ${errorData.message || 'Error desconocido'}`);
+      }
+    } catch (error) {
+      console.error('Error al crear suscripción:', error);
+      alert(`Error al crear suscripción: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -451,59 +584,124 @@ function App() {
   );
 
   // Renderizar tabla de suscripciones de un perfil
-  const renderProfileSubscriptionsTable = () => (
-    <>
-      <Box display="flex" alignItems="center" mb={2}>
-        <Typography variant="h6">
-          Suscripciones de {selectedProfile?.firstName} {selectedProfile?.lastName}
-        </Typography>
-      </Box>
-      
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Plan</TableCell>
-              <TableCell>Precio</TableCell>
-              <TableCell>Estado</TableCell>
-              <TableCell>Inicio Período</TableCell>
-              <TableCell>Fin Período</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {profileSubscriptions.map((sub) => (
-              <TableRow key={sub.id || sub.subscriptionId || 'unknown'}>
-                <TableCell>{sub.id || sub.subscriptionId || 'N/A'}</TableCell>
-                <TableCell>
-                  {sub.planName || 
-                    (sub.planType === 'plan_basic' ? 'Básico' :
-                    sub.planType === 'plan_premium' ? 'Premium' :
-                    (sub.planType || 'N/A'))}
-                </TableCell>
-                <TableCell>
-                  {sub.planPrice ? 
-                    `${sub.planPrice} ${sub.planCurrency?.toUpperCase() || 'EUR'}` : 
-                    (sub.planType === 'plan_basic' || sub.planType?.includes('999')) ? '9.99 EUR' :
-                    (sub.planType === 'plan_premium' || sub.planType?.includes('2999')) ? '29.99 EUR' : 'N/A'}
-                </TableCell>
-                <TableCell>{sub.status || 'N/A'}</TableCell>
-                <TableCell>{formatDate(sub.currentPeriodStart)}</TableCell>
-                <TableCell>{formatDate(sub.currentPeriodEnd)}</TableCell>
-              </TableRow>
-            ))}
-            {profileSubscriptions.length === 0 && (
+  const renderProfileSubscriptionsTable = () => {
+    // Crear un identificador único basado en el perfil para cualquier caso donde
+    // todos los IDs de suscripción sean idénticos (común con Stripe Mock)
+    const profileIdSuffix = selectedProfile?.id?.substring(0, 6) || '';
+    const createdAt = selectedProfile?.createdAt || new Date().toISOString();
+    const uniqueSuffix = new Date(createdAt).getTime().toString().substring(6, 12);
+    
+    return (
+      <>
+        <Box display="flex" alignItems="center" mb={2}>
+          <Typography variant="h6">
+            Suscripciones de {selectedProfile?.firstName} {selectedProfile?.lastName}
+          </Typography>
+        </Box>
+        
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={6} align="center">
-                  No hay suscripciones para este perfil
-                </TableCell>
+                <TableCell>ID</TableCell>
+                <TableCell>Plan</TableCell>
+                <TableCell>Precio</TableCell>
+                <TableCell>Estado</TableCell>
+                <TableCell>Inicio Período</TableCell>
+                <TableCell>Fin Período</TableCell>
+                <TableCell>Acciones</TableCell>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </>
-  );
+            </TableHead>
+            <TableBody>
+              {profileSubscriptions.map((sub, index) => {
+                // Generar un ID de suscripción artificial único cuando se detectan IDs idénticos
+                // Sólo hacemos esto si los IDs de suscripción son idénticos para múltiples elementos
+                const isStaticMockId = profileSubscriptions.length > 1 && 
+                  index > 0 && 
+                  sub.subscriptionId === profileSubscriptions[0].subscriptionId;
+                
+                const displayId = isStaticMockId 
+                  ? `${sub.subscriptionId.substring(0, 8)}_${profileIdSuffix}_${index}` 
+                  : (sub.id || sub.subscriptionId || 'N/A');
+                
+                return (
+                  <TableRow key={`${sub.id || sub.subscriptionId || 'unknown'}_${index}`}>
+                    <TableCell>
+                      {displayId}
+                      {isStaticMockId && (
+                        <Typography variant="caption" display="block" color="textSecondary">
+                          (ID visualización única)
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {sub.planName || 
+                        (sub.planType === 'plan_basic' ? 'Básico' :
+                        sub.planType === 'plan_premium' ? 'Premium' :
+                        (sub.planType || 'N/A'))}
+                    </TableCell>
+                    <TableCell>
+                      {sub.planPrice ? 
+                        `${sub.planPrice} ${sub.planCurrency?.toUpperCase() || 'EUR'}` : 
+                        (sub.planType === 'plan_basic' || sub.planType?.includes('999')) ? '9.99 EUR' :
+                        (sub.planType === 'plan_premium' || sub.planType?.includes('2999')) ? '29.99 EUR' : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      {sub.status === 'active' && sub.cancelAtPeriodEnd ? (
+                        <Chip label="Pausada" color="warning" size="small" />
+                      ) : sub.status === 'active' ? (
+                        <Chip label="Activa" color="success" size="small" />
+                      ) : sub.status === 'canceled' ? (
+                        <Chip label="Cancelada" color="error" size="small" />
+                      ) : sub.status === 'past_due' ? (
+                        <Chip label="Pago pendiente" color="warning" size="small" />
+                      ) : (
+                        sub.status || 'N/A'
+                      )}
+                    </TableCell>
+                    <TableCell>{formatDate(sub.currentPeriodStart)}</TableCell>
+                    <TableCell>{formatDate(sub.currentPeriodEnd)}</TableCell>
+                    <TableCell>
+                      <IconButton 
+                        size="small"
+                        color="primary"
+                        onClick={() => handleViewSubscriptionDetails(sub)}
+                        aria-label="Ver detalles"
+                      >
+                        <VisibilityIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {profileSubscriptions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center">
+                    <Box py={3}>
+                      <Typography variant="h6" color="textSecondary" gutterBottom>
+                        No hay suscripciones activas
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Este perfil no tiene ninguna suscripción activa en este momento.
+                      </Typography>
+                      <Button 
+                        variant="outlined" 
+                        color="primary" 
+                        sx={{ mt: 2 }}
+                        onClick={handleCreateSubscriptionOpen}
+                      >
+                        Añadir suscripción
+                      </Button>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </>
+    );
+  };
 
   // Renderizar tabla de perfiles (vista general)
   const renderProfilesTable = () => (
@@ -666,6 +864,18 @@ function App() {
     </Dialog>
   );
 
+  // Manejador para ver detalles de la suscripción
+  const handleViewSubscriptionDetails = (subscription) => {
+    setSelectedSubscription(subscription);
+    setDetailSubscriptionOpen(true);
+  };
+  
+  // Manejador para actualizar la lista de suscripciones después de una acción
+  const handleSubscriptionUpdate = async () => {
+    // Recargar las suscripciones del perfil
+    await handleProfileClick(selectedProfile);
+  };
+
   return (
     <div>
       <AppBar position="static">
@@ -732,6 +942,29 @@ function App() {
               
               {/* Diálogo para crear nuevo perfil */}
               {renderCreateProfileDialog()}
+              
+              {/* Diálogo para crear nueva suscripción */}
+              <CreateSubscriptionDialog
+                open={createSubscriptionOpen}
+                onClose={handleCreateSubscriptionClose}
+                subscription={newSubscription}
+                onChange={handleSubscriptionChange}
+                onCreate={handleCreateSubscription}
+                plans={plans}
+                coupons={coupons}
+                loading={loading}
+                loadingPlans={loadingPlans}
+                loadingCoupons={loadingCoupons}
+              />
+              
+              {/* Diálogo para ver detalles de suscripción */}
+              <SubscriptionDetailDialog
+                open={detailSubscriptionOpen}
+                onClose={() => setDetailSubscriptionOpen(false)}
+                subscription={selectedSubscription}
+                profileId={selectedProfile?.id}
+                onUpdate={handleSubscriptionUpdate}
+              />
             </>
           )}
         </Box>

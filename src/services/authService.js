@@ -157,6 +157,39 @@ class AuthService {
 
   async verifyToken(token) {
     try {
+      // PARA DESARROLLO: Permitir token de desarrollo frontend
+      if (process.env.NODE_ENV === 'development' && (
+        token === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbi11c2VyLWlkIiwiZW1haWwiOiJhZG1pbkBua3JpcHRhLmNvbSIsInByb2ZpbGVJZCI6ImFkbWluLTEyMyIsIm9yZ2FuaXphdGlvbklkIjoib3JnLTEyMyIsInJvbGVzIjpbIkFETUlOIiwiVVNFUiJdLCJpYXQiOjE2OTYxNzM3NjksImV4cCI6NDEwMjQ0NDgwMH0.mQ0DZZfWGw7yCaTeVGu2oEK-8ibfN4B_uPNbgMfmhO0' ||
+        token === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbi11c2VyLWlkIiwiZW1haWwiOiJhZG1pbkBua3JpcHRhLmNvbSIsInByb2ZpbGVJZCI6IjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMSIsIm9yZ2FuaXphdGlvbklkIjoiMTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwicm9sZXMiOlsiQURNSU4iLCJVU0VSIl0sImlhdCI6MTY5NjE3Mzc2OSwiZXhwIjo0MTAyNDQ0ODAwfQ.kXaXsOWQQDTsZbkK9Cg7QZ8Q7dhYiRmXfm0RXNtZmKI'
+      )) {
+        logger.info('Autenticación con token de desarrollo para frontend');
+        
+        // Crear un perfil simulado para desarrollo
+        const mockProfile = {
+          id: 'admin-123',
+          email: 'admin@nkripta.com',
+          organizationId: 'org-123',
+          roles: ['ADMIN', 'USER'],
+          sub: 'admin-user-id',
+          Organization: {
+            id: 'org-123',
+            name: 'Organización de Desarrollo'
+          }
+        };
+        
+        return {
+          profile: mockProfile,
+          decoded: {
+            sub: 'admin-user-id',
+            email: 'admin@nkripta.com',
+            profileId: 'admin-123',
+            organizationId: 'org-123',
+            roles: ['ADMIN', 'USER']
+          }
+        };
+      }
+      
+      // Verificación normal para otros casos
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
       // Verificar si el usuario sigue existiendo en la base de datos local

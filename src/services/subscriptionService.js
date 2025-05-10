@@ -175,8 +175,34 @@ class SubscriptionService {
     }
   }
 
+  /**
+   * Cancela una suscripción inmediatamente
+   * @param {string} subscriptionId - ID de la suscripción a cancelar
+   * @returns {Promise<Object>} - Resultado de la cancelación
+   */
   async cancelSubscription(subscriptionId) {
     try {
+      // Verificar si es un ID de suscripción generado por mock
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      const isMockId = subscriptionId.includes('_');
+      
+      if (useStripeMock && isMockId) {
+        // Para suscripciones mock, guardar el estado y generar una respuesta simulada
+        const canceledState = { 
+          status: 'canceled',
+          cancelAtPeriodEnd: true
+        };
+        
+        // Guardar el estado en nuestro Map
+        this.#mockSubscriptionStates.set(subscriptionId, canceledState);
+        
+        return { 
+          ...canceledState,
+          subscriptionId: subscriptionId,
+          message: 'Suscripción cancelada exitosamente (simulación)'
+        };
+      }
+      
       // Cancelar directamente en Stripe
       let canceledSubscription;
       try {
@@ -196,6 +222,220 @@ class SubscriptionService {
       throw error;
     }
   }
+  
+  /**
+   * Pausa una suscripción (cancelar al final del período actual)
+   * @param {string} subscriptionId - ID de la suscripción a pausar
+   * @returns {Promise<Object>} - Resultado de la pausa
+   */
+  async pauseSubscription(subscriptionId) {
+    try {
+      // Verificar si es un ID de suscripción generado por mock
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      const isMockId = subscriptionId.includes('_');
+      
+      if (useStripeMock && isMockId) {
+        // Para suscripciones mock, guardar el estado y generar una respuesta simulada
+        const pausedState = { 
+          status: 'active',
+          cancelAtPeriodEnd: true,
+        };
+        
+        // Guardar el estado en nuestro Map
+        this.#mockSubscriptionStates.set(subscriptionId, pausedState);
+        
+        return { 
+          ...pausedState,
+          subscriptionId: subscriptionId,
+          message: 'Suscripción pausada. Se cancelará al final del período actual (simulación)'
+        };
+      }
+      
+      // Marcar la suscripción para cancelación al final del período
+      let updatedSubscription;
+      try {
+        updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+          cancel_at_period_end: true
+        });
+      } catch (stripeError) {
+        logger.error('Error al pausar en Stripe:', stripeError.message);
+        throw new Error(`No se pudo pausar la suscripción: ${stripeError.message}`);
+      }
+      
+      return { 
+        status: updatedSubscription.status,
+        cancelAtPeriodEnd: updatedSubscription.cancel_at_period_end,
+        subscriptionId: updatedSubscription.id,
+        message: 'Suscripción pausada. Se cancelará al final del período actual.'
+      };
+    } catch (error) {
+      logger.error('Error al pausar suscripción:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Reanuda una suscripción pausada
+   * @param {string} subscriptionId - ID de la suscripción a reanudar
+   * @returns {Promise<Object>} - Resultado de la reanudación
+   */
+  async resumeSubscription(subscriptionId) {
+    try {
+      // Verificar si es un ID de suscripción generado por mock
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      const isMockId = subscriptionId.includes('_');
+      
+      if (useStripeMock && isMockId) {
+        // Para suscripciones mock, guardar el estado y generar una respuesta simulada
+        const resumedState = { 
+          status: 'active',
+          cancelAtPeriodEnd: false,
+        };
+        
+        // Guardar el estado en nuestro Map
+        this.#mockSubscriptionStates.set(subscriptionId, resumedState);
+        
+        return { 
+          ...resumedState,
+          subscriptionId: subscriptionId,
+          message: 'Suscripción reanudada exitosamente (simulación)'
+        };
+      }
+      
+      // Desmarcar la cancelación al final del período
+      let updatedSubscription;
+      try {
+        updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+          cancel_at_period_end: false
+        });
+      } catch (stripeError) {
+        logger.error('Error al reanudar en Stripe:', stripeError.message);
+        throw new Error(`No se pudo reanudar la suscripción: ${stripeError.message}`);
+      }
+      
+      return { 
+        status: updatedSubscription.status,
+        cancelAtPeriodEnd: updatedSubscription.cancel_at_period_end,
+        subscriptionId: updatedSubscription.id,
+        message: 'Suscripción reanudada exitosamente'
+      };
+    } catch (error) {
+      logger.error('Error al reanudar suscripción:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Obtiene los métodos de pago asociados a un perfil
+   * @param {string} profileId - ID del perfil
+   * @returns {Promise<Array>} - Lista de métodos de pago
+   */
+  async getProfilePaymentMethods(profileId) {
+    try {
+      // Obtener el perfil para encontrar el Stripe Customer ID
+      const profile = await Profile.findByPk(profileId);
+      
+      if (!profile) {
+        throw new Error('Perfil no encontrado');
+      }
+      
+      // Si estamos en entorno de prueba/desarrollo
+      const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
+      
+      if (useStripeMock) {
+        // En entorno de desarrollo, generar datos de prueba
+        return this._generateMockPaymentMethods(profile);
+      }
+      
+      // Si el perfil no tiene customerID, no tiene métodos de pago
+      if (!profile.stripeCustomerId) {
+        return [];
+      }
+      
+      // Obtener métodos de pago desde Stripe
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: profile.stripeCustomerId,
+        type: 'card'
+      });
+      
+      return paymentMethods.data.map(method => ({
+        id: method.id,
+        type: method.type,
+        card: {
+          brand: method.card.brand,
+          last4: method.card.last4,
+          expiryMonth: method.card.exp_month,
+          expiryYear: method.card.exp_year
+        },
+        billingDetails: method.billing_details,
+        created: new Date(method.created * 1000),
+        isDefault: method.metadata?.isDefault === 'true'
+      }));
+    } catch (error) {
+      logger.error('Error al obtener métodos de pago:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Genera métodos de pago de prueba para un perfil
+   * @param {Object} profile - Perfil para el que generar métodos de pago
+   * @returns {Array} - Lista de métodos de pago de prueba
+   */
+  _generateMockPaymentMethods(profile) {
+    // Generar un ID único basado en el ID del perfil
+    const profileHash = profile.id
+      .split('')
+      .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    
+    // Determinar cuántos métodos de pago generar (0-2)
+    const cardCount = profileHash % 5 === 0 ? 2 : 1; // 20% tienen 2 tarjetas, 80% tienen 1
+    
+    const mockCards = [];
+    
+    // Generar tarjetas
+    for (let i = 0; i < cardCount; i++) {
+      const cardBrands = ['visa', 'mastercard', 'amex'];
+      const brand = cardBrands[(profileHash + i) % cardBrands.length];
+      
+      // Generar últimos 4 dígitos basados en el perfil (para consistencia)
+      const last4 = String(1000 + ((profileHash + i * 33) % 9000)).padStart(4, '0');
+      
+      // Generar mes y año de expiración
+      const currentYear = new Date().getFullYear();
+      const month = 1 + ((profileHash + i * 7) % 12);
+      const year = currentYear + 1 + ((profileHash + i * 3) % 5);
+      
+      // Crear método de pago mock
+      mockCards.push({
+        id: `pm_${profile.id.substring(0, 8)}_${brand}_${i}`,
+        type: 'card',
+        card: {
+          brand,
+          last4,
+          expiryMonth: month,
+          expiryYear: year
+        },
+        billingDetails: {
+          address: {
+            city: 'Madrid',
+            country: 'ES',
+            line1: 'Calle Principal 123',
+            postal_code: '28001'
+          },
+          email: profile.email,
+          name: `${profile.firstName} ${profile.lastName}`
+        },
+        created: new Date(Date.now() - (i * 30 * 24 * 60 * 60 * 1000)), // La primera tarjeta es más reciente
+        isDefault: i === 0 // La primera tarjeta es la predeterminada
+      });
+    }
+    
+    return mockCards;
+  }
+
+  // Almacenamiento en memoria para estados de suscripciones mock
+  #mockSubscriptionStates = new Map();
 
   async getSubscription(subscriptionId) {
     try {
@@ -206,6 +446,9 @@ class SubscriptionService {
       const isMockId = subscriptionId.includes('_');
       
       if (useStripeMock && isMockId) {
+        // Verificar si tenemos un estado guardado para esta suscripción
+        const savedState = this.#mockSubscriptionStates.get(subscriptionId);
+        
         // Es un ID de mock, así que extraemos la información del ID
         const parts = subscriptionId.split('_');
         if (parts.length >= 3) {
@@ -241,7 +484,8 @@ class SubscriptionService {
               const periodEndDate = new Date(now);
               periodEndDate.setDate(periodStartDate.getDate() + 30); // +30 días desde inicio
               
-              return {
+              // Crear respuesta base
+              const response = {
                 subscriptionId: subscriptionId,
                 profileId: profile.id,
                 organizationId: profile.organizationId,
@@ -255,6 +499,13 @@ class SubscriptionService {
                 cancelAtPeriodEnd: false,
                 customerEmail: profile.email || ''
               };
+              
+              // Aplicar estado guardado si existe
+              if (savedState) {
+                Object.assign(response, savedState);
+              }
+              
+              return response;
             }
           } catch (mockError) {
             logger.warn('Error al buscar perfil para suscripción mock:', mockError.message);
@@ -375,8 +626,18 @@ class SubscriptionService {
           logger.warn('Error al obtener datos de Stripe Mock, usando datos de prueba:', mockError.message);
         }
         
-        // Si llegamos aquí, generamos datos de prueba personalizados
-        return this._generateMockSubscriptions(profile);
+        // Generar suscripciones mock para este perfil
+        const mockSubscriptions = this._generateMockSubscriptions(profile);
+        
+        // Aplicar los estados guardados a las suscripciones mock generadas
+        return mockSubscriptions.map(sub => {
+          const savedState = this.#mockSubscriptionStates.get(sub.subscriptionId);
+          if (savedState) {
+            logger.info(`Aplicando estado guardado a suscripción ${sub.subscriptionId}:`, savedState);
+            return { ...sub, ...savedState };
+          }
+          return sub;
+        });
       }
       
       // En entorno de producción, intentamos obtener los datos reales
@@ -679,6 +940,11 @@ class SubscriptionService {
   
   async canManageSubscription(subscriptionId, profileId, organizationId, roles = []) {
     try {
+      // En modo desarrollo, permitir a los administradores gestionar cualquier suscripción
+      if (process.env.NODE_ENV === 'development' && roles.includes('ADMIN')) {
+        return true;
+      }
+      
       // Verificar si es un ID de suscripción generado por mock
       const isMockId = subscriptionId.includes('_');
       const useStripeMock = process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true';
@@ -1009,6 +1275,11 @@ class SubscriptionService {
    */
   async canViewPaymentMethod(paymentMethodId, profileId, organizationId, roles = []) {
     try {
+      // En modo desarrollo, permitir a los administradores ver cualquier método de pago
+      if (process.env.NODE_ENV === 'development' && roles.includes('ADMIN')) {
+        return true;
+      }
+      
       // En entorno de mock, simplificar la lógica
       if (process.env.USE_STRIPE_MOCK === 'true' || process.env.STRIPE_MOCK_ENABLED === 'true') {
         // Administradores pueden ver cualquier método de pago
