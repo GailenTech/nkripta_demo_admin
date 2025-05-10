@@ -35,5 +35,7 @@ coverage/
 # Archivos de respaldo
 *.bak
 
-# Interfaz de administración
-nkripta-admin-ui/
+# Interfaz de administración (ahora versionada)
+nkripta-admin-ui/node_modules/
+
+**/CLAUDE.local.md
